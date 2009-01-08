@@ -1,28 +1,28 @@
-package Stanford::Remedy::Database;
+package Remedy::Database;
 our $VERSION = "0.50";
 our $ID = q$Id: Database.pm 4710 2008-09-12 19:32:02Z tskirvin $;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Database - database connection for Stanford::Remedy
+Remedy::Database - database connection for Remedy
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Database;
+    use Remedy::Database;
 
-    # $config is a Stanford::Remedy::Config object
-    my $db = Stanford::Remedy::Database->connect ($config);
+    # $config is a Remedy::Config object
+    my $db = Remedy::Database->connect ($config);
     my @entries = $db->select ('System', 'Hostname, OS');
     
 =head1 DESCRIPTION
 
-Stanford::Remedy::Database offers a just-above-DBI layer for database
+Remedy::Database offers a just-above-DBI layer for database
 transactions, along with a query long and a few other helper functions.  This
 lets us abstract away certain aspects of the database work, such as the actual
 type of underlying database, debugging information, rollback-on-failure, and
 (to some extent) query creation.  It is designed for use with the out-of-date
-database created by B<Stanford::Remedy>, but is hopefully general-purpose
+database created by B<Remedy>, but is hopefully general-purpose
 enough to be used for other projects.
 
 =cut
@@ -37,7 +37,7 @@ use warnings;
 use ARS;
 use Class::Struct;
 
-struct 'Stanford::Remedy::Database' => {
+struct 'Remedy::Database' => {
     'ars'     => '$',
     'host'    => '$',
     'pass'    => '$',
@@ -56,7 +56,7 @@ struct 'Stanford::Remedy::Database' => {
 
 =head2 B<Class::Struct> accessors
 
-Stanford::Remedy::Database is a Class::Struct object. 
+Remedy::Database is a Class::Struct object. 
 
 =over 4
 
@@ -103,10 +103,10 @@ The following methods are unique to this class.
 =item connect (CONFIG)
 
 Builds the database connection.  Information to do this comes from either the
-existing object (if offered) or the B<Stanford::Remedy::Config> object
+existing object (if offered) or the B<Remedy::Config> object
 I<CONFIG>.  The fields that are used are the 'remedy_*' fields listed above.
 
-On success, returns the Stanford::Remedy::Database object; throws an
+On success, returns the Remedy::Database object; throws an
 exception on fail.
 
 =cut
@@ -580,12 +580,12 @@ sub DESTROY { shift->disconnect }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy> 
+B<Class::Struct>, B<Remedy> 
 
 =head1 SEE ALSO
 
-Stanford::Remedy::Config(8), Stanford::Remedy::Schema(8), 
-Stanford::Remedy::Table(8)
+Remedy::Config(8), Remedy::Schema(8), 
+Remedy::Table(8)
 
 =head1 AUTHOR
 

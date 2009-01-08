@@ -1,17 +1,17 @@
-package Stanford::Remedy::SGA;
+package Remedy::SGA;
 our $VERSION = "0.12";  
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::SGA - Support Group Association
+Remedy::SGA - Support Group Association
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::SGA;
+    use Remedy::SGA;
 
-    # $remedy is a Stanford::Remedy object
+    # $remedy is a Remedy object
     [...]
     
 
@@ -23,33 +23,33 @@ Stanfor::Remedy::SGA maps users (the B<User> table) to support groups
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
 use warnings;
 
 use Class::Struct;
-use Stanford::Remedy;
-use Stanford::Remedy::Table;
+use Remedy;
+use Remedy::Table;
 
-our @ISA = qw/Stanford::Remedy::SGA::Struct Stanford::Remedy::Table/;
+our @ISA = qw/Remedy::System::Struct Stanford::Remedy::Table/;
 
-struct 'Stanford::Remedy::SGA::Struct' => {
+struct 'Remedy::System::Struct' => {
     'parent'    => '$',
-};
+}
 
 ##############################################################################
-### Subroutines
+### Subroutines ##############################################################
 ##############################################################################
 
 =head1 FUNCTIONS
 
-=item name ()
+=item table ()
 
 =cut
 
-sub name { 'CTM:Support Group Association' }
+sub table { 'Group' }
 
 =item schema ()
 
@@ -75,11 +75,11 @@ sub schema {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Table>
+B<Class::Struct>, B<Remedy::Table>
 
 =head1 SEE ALSO
 
-Stanford::Remedy(8)
+Remedy(8)
 
 =head1 HOMEPAGE
 

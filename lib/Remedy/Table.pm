@@ -1,25 +1,25 @@
-package Stanford::Remedy::Table;
+package Remedy::Table;
 our $VERSION = "0.50";
 our $ID = q$Id: Table.pm 4689 2008-09-11 22:41:37Z tskirvin $;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Table - shared functions for all database tables
+Remedy::Table - shared functions for all database tables
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Table;
+    use Remedy::Table;
 
 This is meant to be used as a template for other modules; please see the 
 man pages listed under SEE ALSO for more usage information.
 
 =head1 DESCRIPTION
 
-Stanford::Remedy::Table implements a consistent set of shared functions used
-by the 'table' modules under B<Stanford::Remedy> - System, Package,
+Remedy::Table implements a consistent set of shared functions used
+by the 'table' modules under B<Remedy> - System, Package,
 SystemPackage, and History.  These functions include interfaces to 
-B<Stanford::Remedy::Database>, functions that store table-specific
+B<Remedy::Database>, functions that store table-specific
 information such as field names and default sorting, and basic debugging tools.
 
 =cut
@@ -79,7 +79,7 @@ sub init_struct {
 
 =head2 Database Functions
 
-These functions wrap B<Stanford::Remedy::Database> with the per-table
+These functions wrap B<Remedy::Database> with the per-table
 information available from the rest of the class' functions.
 
 All functions in this class that take the argument hash I<ARGHASH> honor 
@@ -91,7 +91,7 @@ the option '':
 
 =item ars I<object>
 
-I<object> is a parent B<Stanford::Remedy> object that contains a connection to
+I<object> is a parent B<Remedy> object that contains a connection to
 the remedy database.  If the option is not offered, then we will use the value
 of B<parent ()> from the offered object as the parent.
 
@@ -108,7 +108,7 @@ exception.
 
 Gathers the components of a I<limit_ref> for B<select ()>. Looks at each
 field listed in B<fields ()>, and creates an array of limit components based
-on B<limit_string ()> in B<Stanford::Remedy::Database>.  Follows these
+on B<limit_string ()> in B<Remedy::Database>.  Follows these
 arguments in the hash I<ARGHASH>:
 
 =over 4
@@ -176,7 +176,7 @@ sub insert {
 =item new_from_template (ENTRY, ARGHASH)
 
 Takes information from I<ENTRY> - the output of a single item from a
-B<Stanford::Remedy::Database::select ()> call - and creates a new object in
+B<Remedy::Database::select ()> call - and creates a new object in
 the appropriate class.
 
 Uses two functions - B<field_map ()>, to map fields to function names so we can
@@ -238,7 +238,7 @@ sub register {
 
 =item select (PARENT, ARGHASH)
 
-Searches the database in the B<Stanford::Remedy> object I<PARENT>, based on
+Searches the database in the B<Remedy> object I<PARENT>, based on
 the arguments in the argument hash I<ARGHASH>:
 
 =over 4
@@ -264,7 +264,7 @@ array.
 =back
 
 Returns an array of objects, created with B<new_from_template ()>. Please see
-Stanford::Remedy::Database(8) for more details on the B<select ()> call used
+Remedy::Database(8) for more details on the B<select ()> call used
 to gather the data.
 
 If invoked in a scalar context, only returns the first item.
@@ -735,7 +735,7 @@ sub parse_register {
 
 =head1 SEE ALSO
 
-Stanford::Remedy::Ticket(8)
+Remedy::Ticket(8)
 
 =head1 AUTHOR
 

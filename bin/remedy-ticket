@@ -21,8 +21,8 @@ our $LOG_TAG = "TKT_SHOW";
 ## What's the default request type?
 our $DEFAULT_TYPE = "base";
 
-our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
-# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
+# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
+our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
 
 our $DEBUG;
 
@@ -35,7 +35,7 @@ use warnings;
 
 use Getopt::Long qw/GetOptions/;
 use Pod::Usage;
-use Stanford::Remedy::Unix;
+use Remedy;
 use Text::Wrap;
 
 $0 =~ s%.*/%%g;     # Lose the annoying path information
@@ -54,7 +54,7 @@ my $result = $parser->getoptions (
     'h|help'        => sub { pod2usage (-verbose=>1) }) || pod2usage (1);
 
 debug ("Loading config file $CONFIG") if $CONFIG;
-my $config = eval { Stanford::Remedy::Unix::Config->load ($CONFIG) };
+my $config = eval { Remedy::Config->load ($CONFIG) };
 error ($@) unless $config;
 error ($config) if $@;
 
@@ -64,7 +64,7 @@ $config->loglevel ($LOGLEVEL);
 my ($query, @rest) = @ARGV;
 
 debug ("Connecting to database");
-my $remedy = eval { Stanford::Remedy::Unix->connect ($config) }
+my $remedy = eval { Remedy->connect ($config) }
     or error ("couldn't connect to database: $@");
 error ($@) if $@;
 

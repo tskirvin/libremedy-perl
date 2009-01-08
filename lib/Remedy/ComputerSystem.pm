@@ -1,25 +1,25 @@
-package Stanford::Remedy::Unix::WorkLog;
+package Remedy::ComputerSystem;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Unix::Worklog - per-ticket worklogs
+Stanford::Remedy::Worklog - per-ticket worklogs
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Unix::Worklog;
+    use Stanford::Remedy::Worklog;
 
-    # $remedy is a Stanford::Remedy::Unix object
-    my @worklog = Stanford::Remedy::Unix::WorkLog->select (
+    # $remedy is a Stanford::Remedy object
+    my @worklog = Stanford::Remedy::ComputerSystem->select (
         'db' => $remedy, 'IncNum' => 'INC000000002371');
     for my $wl (@worklog) { print scalar $wl->print_text }
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Unix::WorkLog tracks individual work log entries for tickets as part
-of the remedy database.  It is a sub-class of B<Stanford::Packages::Form>, so
+Stanfor::Remedy::ComputerSystem tracks individual work log entries for tickets as part
+of the remedy database.  It is a sub-class of B<Stanford::Packages::Table>, so
 most of its functions are described there.
 
 =cut
@@ -31,11 +31,11 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Stanford::Remedy::Unix;
-use Stanford::Remedy::Unix::Form;
+use Stanford::Remedy;
+use Stanford::Remedy::Table;
 
-our @ISA = (Stanford::Remedy::Unix::Form::init_struct (__PACKAGE__),
-    'Stanford::Remedy::Unix::Form');
+our @ISA = (Stanford::Remedy::Table::init_struct ('Stanford::Remedy::ComputerSystem'),
+    'Stanford::Remedy::Table');
 
 ##############################################################################
 ### Class::Struct
@@ -66,13 +66,15 @@ The date that the worklog was created.  Corresponds to field
 
 =item inc_num ($)
 
-Incident number of the original ticket.  Corresponds to field 'Incident Number'.
+Incident number of the original ticket.  Correspons to field 'Incident Number'.
 
 =item map (%)
 
-A 
+[...]
 
 =item parent ($)
+
+[...]
 
 =item submitter ($)
 
@@ -91,28 +93,9 @@ Address of the person who created this worklog entry.  Corresponds to field
 
 =over 4
 
-=item attachments 
+=back
 
-Lists the names of the attachments connected with this worklog, separated with
-semicolons, or 'none' if there are none.
-
-=cut
-
-sub attachments {
-    my ($self) = @_;
-    my @list;
-    for my $i (qw(1 2 3 4 5)) {
-        my $func = "attach$i";
-        my $attach = $self->$func;
-        if ($attach && ref $attach) { 
-            push @list, $$attach{'name'};
-        }
-            
-    }
-    return scalar @list ? join ("; ", @list) : "none";
-}
-
-=head2 B<Stanford::Remedy::Unix::Form Overrides>
+=head2 B<Stanford::Remedy::Table Overrides>
 
 =over 4
 
@@ -121,17 +104,8 @@ sub attachments {
 =cut
 
 sub field_map { 
-    'id'                    => 'Work Log ID',
-    'description'           => 'Description',
-    'details'               => 'Detailed Description',
-    'date_submit'           => 'Work Log Submit Date',
-    'submitter'             => 'Work Log Submitter',
-    'inc_num'               => 'Incident Number',
-    'attach1'               => 'z2AF Work Log01',
-    'attach2'               => 'z2AF Work Log02',
-    'attach3'               => 'z2AF Work Log03',
-    'attach4'               => 'z2AF Work Log04',
-    'attach5'               => 'z2AF Work Log05',
+    'id'                    =>          1,
+    'serial'                => 2000000001,
 }
 
 =item limit (ARGS)
@@ -152,10 +126,10 @@ Defaults to B<limit_basic ()>.
 
 sub limit {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
+    my $parent = $self->parent_or_die ('limit', %args);
 
     if (my $incnum = $args{'IncNum'}) { 
-        my $id = $self->field_to_id ("Incident Number", %args);
+        my $id = $self->field_to_id ("Incident Number");
         return "'$id' == \"$incnum\"";
     }
 
@@ -190,7 +164,32 @@ sub print_text {
 
 =cut
 
-sub table { 'HPD:WorkLog' }
+sub table { 'BMC.CORE:BMC_ComputerSystem' }
+
+=item schema ()
+
+=cut
+
+sub schema {
+    return (
+          112 => "CMDB Row Level Security",     # must be '1000000000'
+    200000001 => "Serial Number",
+    200000003 => "Category",
+    200000004 => "Type",
+    200000005 => "Item",
+    200000020 => "Name",
+    200000022 => "Physical Memory",
+    240000007 => "Description",
+    240001002 => "Model",
+    240001003 => "Manufacturer",
+    301002900 => "Owner Name",
+    301016000 => "Hostname",
+    301016200 => "Primary Type",                # integer, 1-31
+    400079600 => "ClassID",                     # must be 'BMC_COMPUTERSYSTEM'
+    400127400 => "Dataset ID",
+    490021100 => "UserDisplayObjectName",       # must be 'Computer System'
+    );
+}
 
 =back
 
@@ -202,11 +201,11 @@ sub table { 'HPD:WorkLog' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Unix::Form>
+B<Class::Struct>, B<Stanford::Remedy::Table>
 
 =head1 SEE ALSO
 
-Stanford::Remedy::Unix(8)
+Stanford::Remedy(8)
 
 =head1 HOMEPAGE
 
@@ -218,7 +217,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.

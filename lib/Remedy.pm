@@ -1,21 +1,21 @@
-package Stanford::Remedy::Unix;
+package Remedy;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Unix - basic OO interface to the Remedy API
+Remedy - basic OO interface to the Remedy API
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Unix;
+    use Remedy;
 
 [...]
 
 =head1 DESCRIPTION
 
-Stanford::Remedy::Unix offers an object-oriented interface to the ARSPerl Remedy API,
+Remedy offers an object-oriented interface to the ARSPerl Remedy API,
 usable to read and modify tickets.  
 
 =cut
@@ -41,11 +41,11 @@ use Stanford::Remedy::Form;
 use Stanford::Remedy::Session;
 use Stanford::Remedy::Incident;
 
-use Stanford::Remedy::Unix::Config;
-use Stanford::Remedy::Unix::Ticket;
+use Remedy::Config;
+use Remedy::Ticket;
 
-struct 'Stanford::Remedy::Unix' => {
-    'config'   => 'Stanford::Remedy::Unix::Config',
+struct 'Remedy' => {
+    'config'   => 'Remedy::Config',
     'loglevel' => '$',
     'formdata' => '%',
     'session'  => 'Stanford::Remedy::Session',
@@ -76,7 +76,7 @@ sub connect {
 
     # Load and store configuration information
     my $conf = $config if ($config && ref $config);
-    $conf ||= Stanford::Remedy::Unix::Config->new ($config);
+    $conf ||= Remedy::Config->new ($config);
     $self->config ($conf);
 
     # Gather basic information from the configuration file; there's more to 
@@ -109,7 +109,7 @@ sub connect {
 
 sub list {
     my ($self, %args) = @_;
-    Stanford::Remedy::Unix::Ticket->select ('db' => $self, %args);
+    Remedy::Ticket->select ('db' => $self, %args);
 }
 
 =item parse_incident_number (NUMBER)
@@ -154,7 +154,7 @@ sub audit_entries {
     my ($self, $inc_num) = @_;
     my $ars = $self->ars;
 
-    my $table = Stanford::Remedy::Unix::Audit->table;
+    my $table = Remedy::Audit->table;
 
     my $eid = $self->eid_from_incnum ($inc_num);
     # Search by incident number - field 1000000161
@@ -278,7 +278,7 @@ context, returns a hash of such entries, where the keys are the "Entry ID".
 sub search_sga {
     my ($self, $user, $gid) = @_;
     return unless ($user || $gid);
-    Stanford::Remedy::Unix::SGA->search ('db' => $self, 'Login Name' => $user,
+    Remedy::SGA->search ('db' => $self, 'Login Name' => $user,
         'Group' => $gid);
 }
 
@@ -293,7 +293,7 @@ hash of such entries, where the keys are the "Entry ID".
 
 sub search_supportgroup {
     my ($self, $group) = @_;
-    Stanford::Remedy::Unix::SupportGroup->search ('db' => $self, 'Group' => $group);
+    Remedy::SupportGroup->search ('db' => $self, 'Group' => $group);
 }
 
 =item show_sga_full (AR, USER)
@@ -584,13 +584,13 @@ used by other functions.
 
 sub tkt {
     my ($self, $incnum) = @_;
-    # $self->init_form ('Stanford::Remedy::Unix::Ticket');
-    Stanford::Remedy::Unix::Ticket->select ('db' => $self, 'IncNum' => $incnum);
+    # $self->init_form ('Remedy::Ticket');
+    Remedy::Ticket->select ('db' => $self, 'IncNum' => $incnum);
 }
 
 sub computer {
     my ($self, $cmdb) = @_;
-    Stanford::Remedy::Unix::ComputerSystem->select ('db' => $self, 'Name' => $cmdb);
+    Remedy::ComputerSystem->select ('db' => $self, 'Name' => $cmdb);
 }
 
 sub init_form {

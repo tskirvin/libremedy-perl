@@ -1,22 +1,22 @@
-package Stanford::Remedy::SupportGroup;
+package Remedy::SupportGroup;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::SupportGroup - Support Group Association
+Remedy::SupportGroup - Support Group Association
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::SupportGroup;
+    use Remedy::SupportGroup;
 
-    # $remedy is a Stanford::Remedy object
+    # $remedy is a Remedy object
     [...]
 
 =head1 DESCRIPTION
 
-Stanford::Remedy::SupportGroup [...]
+Remedy::SupportGroup [...]
 
 =cut
 
@@ -28,12 +28,12 @@ use strict;
 use warnings;
 
 use Class::Struct;
-use Stanford::Remedy;
-use Stanford::Remedy::Table;
+use Remedy;
+use Remedy::Table;
 
-our @ISA = qw/Stanford::Remedy::SupportGroup::Struct Stanford::Remedy::Table/;
+our @ISA = qw/Remedy::SupportGroup::Struct Stanford::Remedy::Table/;
 
-struct 'Stanford::Remedy::SupportGroup::Struct' => {
+struct 'Remedy::SupportGroup::Struct' => {
     'parent'    => '$',
 };
 
@@ -73,11 +73,11 @@ sub schema {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Table>
+B<Class::Struct>, B<Remedy::Table>
 
 =head1 SEE ALSO
 
-Stanford::Remedy(8)
+Remedy(8)
 
 =head1 HOMEPAGE
 

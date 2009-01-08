@@ -1,21 +1,21 @@
-package Stanford::Remedy::User;
+package Remedy::User;
 our $VERSION = "0.12";  
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::User - basic API interface
+Remedy::User - basic API interface
 
 =head1 SYNOPSIS
 
-  use Stanford::Remedy;
+  use Remedy;
 
 See the various sub-scripts for more details.
 
 =head1 DESCRIPTION
 
-Stanford::Remedy is meant to be a central repository of functions to read and,
+Remedy is meant to be a central repository of functions to read and,
 in some cases, modify tickets in our local trouble ticket system.  It is
 converted from some scripts for previous versions of the system.
 
@@ -29,12 +29,12 @@ use strict;
 use warnings;
 
 use Class::Struct;
-use Stanford::Remedy;
-use Stanford::Remedy::Table;
+use Remedy;
+use Remedy::Table;
 
-our @ISA = qw/Stanford::Remedy::User::Struct Stanford::Remedy::Table/;
+our @ISA = qw/Remedy::User::Struct Stanford::Remedy::Table/;
 
-struct 'Stanford::Remedy::User::Struct' => {
+struct 'Remedy::User::Struct' => {
     'parent'    => '$',
 };
 
@@ -93,11 +93,11 @@ sub schema {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Table>
+B<Class::Struct>, B<Remedy::Table>
 
 =head1 SEE ALSO
 
-Stanford::Remedy(8)
+Remedy(8)
 
 =head1 HOMEPAGE
 

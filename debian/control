@@ -1,4 +1,4 @@
-Source: libstanford-remedy-unix-perl
+Source: libremedy-perl
 Section: net
 Priority: extra
 Maintainer: Tim Skirvin <tskirvin@stanford.edu>
@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 4)
 Build-Depends-Indep: perl
 Standards-Version: 3.7.2
 
-Package: libstanford-remedy-unix-perl
+Package: libremedy-perl
 Architecture: all
 Depends: libars-perl, libstanford-remedy-perl
 Description: Stanford Remedy Tools for the Unix Team

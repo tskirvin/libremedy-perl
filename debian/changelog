@@ -1,5 +1,5 @@
-libstanford-remedy-unix-perl (1) intrepid; urgency=low
+remedy-perl (1) intrepid UNRELEASED; urgency=low
 
-  * Small doc fixes in remedy-wrapper
+  * Converting to the name 'Remedy'
 
  -- Tim Skirvin <tskirvin@stanford.edu>  Mon, 06 Jan 2009 12:47:02 -0800

@@ -1,21 +1,21 @@
-package Stanford::Remedy::Unix::Config;
+package Remedy::Config;
 our $VERSION = '0.50';
 our $ID = q$Id: Config.pm 4666 2008-09-09 22:57:25Z tskirvin $;
 
 =head1 NAME
 
-Stanford::Remedy::Unix::Config - Configuration for Stanford::Remedy
+Remedy::Config - Configuration for Stanford::Remedy
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Unix::Config;
+    use Remedy::Config;
 
     my $file = '/etc/remedy/remedy.conf';
-    my $config = Stanford::Remedy::Unix::Config->load ($file);
+    my $config = Remedy::Config->load ($file);
     
 =head1 DESCRIPTION
 
-Stanford::Remedy::Unix::Config encapsulates all of the configuration information
+Remedy::Config encapsulates all of the configuration information
 for B<Stanford::Remedy>.  
 
 It is implemented as a Perl class that declares and sets the defaults for
@@ -57,7 +57,7 @@ use warnings;
 
 use Class::Struct;
 
-struct 'Stanford::Remedy::Unix::Config' => {
+struct 'Remedy::Config' => {
     'company'     => '$',
     'config'      => '$',
     'count'       => '$',
@@ -182,7 +182,7 @@ its man page for more details about the various sub-functions.
 
 =item load ([FILE])
 
-Creates a new B<Stanford::Remedy::Unix::Config> object and loads F<FILE> (or the 
+Creates a new B<Remedy::Config> object and loads F<FILE> (or the 
 value of the environment variable B<OOD_CONFIG>, or the value of $CONFIG) to
 generate its default values.  Returns the new object.
 
@@ -236,7 +236,7 @@ configuration file to load instead of F</etc/remedy/config>.
 
 =head1 SEE ALSO
 
-Class::Struct(8), Stanford::Remedy::Unix(8)
+Class::Struct(8), Remedy(8)
 
 =head1 HOMEPAGE
 

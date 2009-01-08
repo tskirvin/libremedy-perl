@@ -1,4 +1,4 @@
-package Stanford::Remedy::SGA;
+package Remedy::SGA;
 our $VERSION = "0.12";  
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.

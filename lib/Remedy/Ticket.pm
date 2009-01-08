@@ -1,17 +1,17 @@
-package Stanford::Remedy::Unix::Ticket;
+package Remedy::Ticket;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Unix::Ticket - Support Group Association
+Remedy::Ticket - Support Group Association
 
 =head1 SYNOPSIS
 
-use Stanford::Remedy::Unix::Ticket;
+use Remedy::Ticket;
 
-# $remedy is a Stanford::Remedy::Unix object
+# $remedy is a Remedy object
 [...]
 
 =head1 DESCRIPTION
@@ -134,12 +134,11 @@ use strict;
 use warnings;
 
 use POSIX qw/strftime/;
-use Stanford::Remedy::Unix;
-use Stanford::Remedy::Unix::Form;
-use Stanford::Remedy::Unix::WorkLog;
+use Remedy;
+use Remedy::Form;
+use Remedy::WorkLog;
 
-our @ISA = (Stanford::Remedy::Unix::Form::init_struct (__PACKAGE__),
-    'Stanford::Remedy::Unix::Form');
+our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
 
 ##############################################################################
 ### Subroutines
@@ -271,7 +270,7 @@ sub text_requestor {
 sub worklog {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die (%args);
-    return Stanford::Remedy::Unix::WorkLog->select ('db' => $parent, 
+    return Remedy::WorkLog->select ('db' => $parent, 
         'IncNum' => $self->inc_num, %args);
 }
 
@@ -279,7 +278,7 @@ sub worklog {
 
 =cut
 
-=head2 B<Stanford::Remedy::Unix::Form Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -462,11 +461,11 @@ sub _format_email {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Unix::Form>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
-Stanford::Remedy::Unix(8)
+Remedy(8)
 
 =head1 HOMEPAGE
 
@@ -478,7 +477,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.
