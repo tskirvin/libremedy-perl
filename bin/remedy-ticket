@@ -1,0 +1,304 @@
+#!/usr/bin/perl
+# Copyright and license are in the documentation below.
+
+##############################################################################
+### Configuration
+##############################################################################
+
+## Modify and uncomment this to use user code instead of just system-wide
+## modules, or to use development versions.
+# use lib '/FULL/PATH/TO/PERL/MODULES';
+
+use lib "$ENV{HOME}/work/remedy/Stanford-Remedy/lib";   # not ideal
+use lib "$ENV{HOME}/work/libremedy-perl/lib";
+
+## Log level; higher is more.  '9' is considered fully verbose.
+our $LOGLEVEL = 1;
+
+## Tag to include include in the common log file
+our $LOG_TAG = "TKT_SHOW";
+
+## What's the default request type?
+our $DEFAULT_TYPE = "base";
+
+our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
+# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
+
+our $DEBUG;
+
+##############################################################################
+### Declarations
+##############################################################################
+
+use strict;
+use warnings;
+
+use Getopt::Long qw/GetOptions/;
+use Pod::Usage;
+use Stanford::Remedy::Unix;
+use Text::Wrap;
+
+$0 =~ s%.*/%%g;     # Lose the annoying path information
+
+##############################################################################
+### main ()
+##############################################################################
+
+$|++;       # Flush output
+
+my $parser = new Getopt::Long::Parser;
+my $result = $parser->getoptions (
+    'c|config=s'    => \$CONFIG,
+    'd|debug'       => sub { $DEBUG = 1; $LOGLEVEL = 9 },
+    'man'           => sub { pod2usage (-verbose=>2) },
+    'h|help'        => sub { pod2usage (-verbose=>1) }) || pod2usage (1);
+
+debug ("Loading config file $CONFIG") if $CONFIG;
+my $config = eval { Stanford::Remedy::Unix::Config->load ($CONFIG) };
+error ($@) unless $config;
+error ($config) if $@;
+
+$config->debug    ($DEBUG);
+$config->loglevel ($LOGLEVEL);
+
+my ($query, @rest) = @ARGV;
+
+debug ("Connecting to database");
+my $remedy = eval { Stanford::Remedy::Unix->connect ($config) }
+    or error ("couldn't connect to database: $@");
+error ($@) if $@;
+
+if (lc $query eq 'ticket') { 
+    my ($inc, $type, @args) = @rest;
+    my $incnum = $remedy->parse_incident_number ($inc)
+        or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
+    pod2usage (-verbose => 1) unless defined $incnum;
+
+    $type ||= 'tkt';
+
+    debug ("Getting $type information about ticket $incnum");
+    my $tkt = $remedy->tkt ($incnum)
+        or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
+
+    if ($type =~ /^(all|debug|full)$/i) {
+        print "Full information for ", $tkt->inc_num, "\n";
+        print scalar $tkt->debug_text;
+    } elsif (lc $type eq 'worklog') { 
+        print "Worklog entries for $incnum\n";
+        # todo
+    } elsif (lc $type eq 'audit') { 
+        # todo
+    } elsif (lc $type eq 'assign') {
+    } elsif (lc $type eq 'close') {
+    } elsif (lc $type eq 'status') {
+    } elsif (lc $type eq 'worklog') {
+    } else {
+        print scalar $tkt->print_text;
+    }
+
+} elsif (lc $query eq 'computer') { 
+
+    foreach my $computer ($remedy->computer) { 
+        print scalar $computer->debug_text;
+    }
+
+} elsif (lc $query eq 'list') { 
+    my ($type, $user, $subtype, $assign, $time);
+
+    $user = 'tskirvin';
+
+    foreach my $tkt ($remedy->list ('type' => $type, 'user' => $user, 
+        'subtype' => $subtype, 'assign' => $assign, 'time' => $time)) {
+        print scalar $tkt->summary_text;
+    }
+
+} elsif (lc $query eq 'worklog') { 
+} elsif (lc $query eq 'group') { 
+
+    
+} else {
+    $query ||= '(none)';
+    error ("Invalid query type: '$query'");
+}
+
+exit 0;
+
+##############################################################################
+### Subroutines 
+##############################################################################
+
+sub debug { warn "$0: @_\n" if $DEBUG }
+sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
+
+### _log_and_die (TEXT)
+# Logs TEXT with mainlib.pl's log () function, and dies with the text.
+
+sub _log_and_die {
+    my (@args) = @_;
+    my $text = join ("\n", @args, '');
+#    Stanford::Remedy::remedy_log ($LOG_TAG, $text);
+#    Stanford::Remedy::remedy_logoff ($AR) if $AR;
+    die $text;
+}
+
+### _loglevel (LEVEL, TEXT)
+# Logs TEXT with mainlib.pl's log () function if the level passed is
+# less-or-equal to the current $LOGLEVEL.
+
+sub _loglevel {
+    my ($level, @args) = @_;
+    Stanford::Remedy::remedy_log_iflevel ($level, $LOG_TAG, @args);
+}
+
+### _parse_params (TICKET, TYPE)
+# Pulls the ticket and printing parameters from the command-line.
+
+sub _parse_params {
+    shift @_ if $ENV{'REMOTE_USER'};    # support for remctl use
+    my ($incnum, $type) = @_;
+    $type ||= "base";
+    pod2usage (-verbose => 1) unless ($incnum && $type);
+
+    $type = lc $type;
+    _loglevel (5, "Type set to $type");
+    pod2usage (-verbose => 1) if $incnum =~ /^(base|full|all|help)$/i;
+
+    # Standardize the ticket name
+    unless (($incnum =~ /^(INC|TAS)/) && (length ($incnum) == 15)) {
+        my $prefix = $1;
+        if ($incnum =~ /^HD\d+/) {
+            $incnum =~ s/^HD0//;
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        } elsif ($incnum =~ /^$prefix\d+/) {
+            $incnum =~ s/^$prefix//;
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        } elsif ($incnum =~ /^\d+$/) {
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        }
+    }
+    _loglevel (5, "req set to $incnum");
+
+    _loglevel (5, "ticket requested is $incnum");
+
+    ($incnum, $type);
+}
+
+##############################################################################
+### Documentation
+##############################################################################
+
+=head1 NAME
+
+remedy-ticket - prints useful information about a Remedy ticket
+
+=head1 SYNOPSIS
+
+  remedy-ticket [-hv] C<INCIDENT_NUMBER> [<base|full|worklog|audit>]
+
+=head1 DESCRIPTION
+
+remedy-ticket queries the Remedy database for information on a given ticket 
+(as refrenced with C<INCIDENT_NUMBER> and creates a human-parsable report 
+containing all relevant information, including worklog information.  It is 
+designed to be used through a remctl interface for the Unix Systems team.
+
+Note that extensive logging is stored in B</tmp/remedy_log.txt>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-h>, B<--help>
+
+Prints out the synopsis information and exits.
+
+=item B<-v>, B<--version>
+
+Prints out the version information and exits.
+
+=back
+
+=head1 EXAMPLES
+
+There are three basic modes of operation:
+
+=over 4
+
+=item remedy-ticket INC000000804714
+
+=item remedy-ticket INC000000804714 base
+
+Prints basic information about the ticket, the requestor, who it has been
+assigned to, resolution information, and a summary of the associated work
+log entries.  Returns results that look something like this (but longer):
+
+  Basic Info
+    Ticket:               INC000000804714
+    Summary:              Data Backup and Recovery
+    Submitted:            Mon Feb 25 09:32:05 2008
+    Status:               Closed
+    [...]
+
+This is the default mode.
+
+=item remedy-ticket INC000000804714 full
+
+Offers a basic "debugging" mode for the ticket itself, so that all fields 
+in the ticket can be viewed.  Returns results like this:
+
+  Full information for INC000000804714
+
+             1 Entry ID                         INC000000804609
+             2 Submitter                        RemedyAPIUser
+             3 Submit Date                      1203960725
+             4 Assignee Login ID                jared14
+             5 Last Modified By                 AR_ESCALATOR
+             6 Last Modified Date               1209327132
+    [...]
+
+=item remedy-ticket INC000000804714 worklog
+
+Offers the same kind of "debugging" mode, but for the worklog information 
+regarding the ticket.  Returns results like this:
+
+Worklog Entries for INC000000804714
+
+  Entry 1
+             1 Work Log ID                      WLG000000809377
+             2 Submitter                        spyksma
+             3 Submit Date                      1204150081
+             4 Assigned To                      (none)
+      [...]
+   
+
+  Entry 2
+             1 Work Log ID                      WLG000000810435
+             2 Submitter                        cbyee
+             3 Submit Date                      1204229267
+             4 Assigned To                      (none)
+      [...]
+
+=item remedy-ticket INC000000804714 audit
+
+Prints all of the audit log information about the ticket.  
+
+=back
+
+=cut
+
+=head1 REQUIREMENTS
+
+B<Stanford::Remedy>
+
+=cut
+
+=head1 AUTHOR
+
+Based on original unattributed source script 'show_inc_tkt'.  Rewritten and new
+features added by Tim Skirvin <tskirvin@stanford.edu>
+
+=head1 LICENSE
+
+For Stanford internal use only.
+
+=cut
