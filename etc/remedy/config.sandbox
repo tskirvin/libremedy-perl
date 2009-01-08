@@ -1,0 +1,28 @@
+#########################################################################
+### Stanford::Remedy Configuration 
+#########################################################################
+# $Id: remedy.conf 4522 2008-06-27 17:53:33Z tskirvin $
+
+## Where is the server hosted, and how do we connect to it?
+$REMEDY_HOST = "r7-app2";
+$REMEDY_PORT = "7150";
+$REMEDY_USER = "SVC_CMDBAPIUser";
+$REMEDY_PASS = 'c3p0r2d2';
+
+## Default criteria for queries and updates
+$COMPANY   = "Stanford University";
+$SUB_ORG   = "IT Services";
+$WORKGROUP = "ITS Unix Systems";
+$USERNAME  = "";
+
+## Where will we log our usage?
+$LOGFILE  = "/tmp/remedy_log-debug.txt";
+$LOGLEVEL = 9;
+
+## Maximum number of entries to return on a search.
+$SEARCH_COUNT = 100;
+
+## When we're printing text, wrap at this many characters
+$TEXT_WRAP = 79;
+
+1;

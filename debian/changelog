@@ -1,0 +1,5 @@
+libstanford-remedy-unix-perl (1) intrepid; urgency=low
+
+  * Small doc fixes in remedy-wrapper
+
+ -- Tim Skirvin <tskirvin@stanford.edu>  Mon, 06 Jan 2009 12:47:02 -0800

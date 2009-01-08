@@ -1,0 +1,45 @@
+#########################################################################
+### Stanford::Remedy Configuration 
+#########################################################################
+# $Id: remedy.conf 4522 2008-06-27 17:53:33Z tskirvin $
+
+## Where is the server hosted, and how do we connect to it?
+$REMEDY_HOST = "r7-app1-dev.stanford.edu";
+$REMEDY_PORT = "";
+$REMEDY_USER = "svcunix";
+$REMEDY_PASS = 'P1c@550';
+
+## Default criteria for queries and updates
+$COMPANY   = "Stanford University";
+$SUB_ORG   = "IT Services";
+$WORKGROUP = "ITS Unix Systems";
+$USERNAME  = "";
+
+## Where will we log our usage?
+$LOGFILE  = "/tmp/remedy_log-debug.txt";
+$LOGLEVEL = 9;
+
+## Maximum number of entries to return on a search.
+$SEARCH_COUNT = 100;
+
+## When we're printing text, wrap at this many characters
+$TEXT_WRAP = 79;
+
+## Will be killed off soon.
+our %SCHEMA = (
+
+#        'BC'        => 'CFG:Broadcast',
+#        'Dept'      => 'CTM:People Organization',
+#        'HDSupport' => '+HelpSU_SupportingForm',
+        'Audit'     => 'HPD:HelpDesk_AuditLogSystem',
+        'Group'     => 'Group',
+        'HDWorkLog' => 'HPD:WorkLog',
+        'HelpDesk'  => 'HPD:Help Desk',
+        'SGA'       => 'CTM:Support Group Association',
+        'SuppGrp'   => 'CTM:Support Group',
+#        'TicketGen' => 'HPD:CFG Ticket Num Generator',
+        'User'      => 'User',
+
+);
+
+1;

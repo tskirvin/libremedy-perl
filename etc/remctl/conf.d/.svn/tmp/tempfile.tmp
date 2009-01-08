@@ -1,0 +1,11 @@
+# /etc/remctl/conf.d/remedy
+<<<<<<< .mine
+remedy ALL /usr/bin/remedy-wrapper /etc/remctl/acl/operations
+showtkt ALL /usr/bin/remedy-ticket /etc/remctl/acl/operations
+=======
+remedy ticket /usr/bin/remedy-ticket /etc/remctl/acl/operations
+remedy list   /usr/bin/remedy-list   /etc/remctl/acl/operations
+remedy ALL    /usr/bin/remedy-ticket /etc/remctl/acl/operations
+showtkt ALL   /usr/bin/remedy-ticket /etc/remctl/acl/operations
+>>>>>>> .r4466
+
