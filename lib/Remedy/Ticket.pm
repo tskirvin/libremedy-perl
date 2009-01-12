@@ -134,11 +134,15 @@ use strict;
 use warnings;
 
 use POSIX qw/strftime/;
+
 use Remedy;
+use Remedy::Audit;
 use Remedy::Form;
+use Remedy::TicketGen;
 use Remedy::WorkLog;
 
-our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
+our @ISA = (Remedy::Form::init_struct (__PACKAGE__, 'ticketgen' =>
+    'Remedy::TicketGen'), 'Remedy::Form');
 
 ##############################################################################
 ### Subroutines
@@ -149,6 +153,53 @@ our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
 =head2 Local Methods
 
 =over 4
+
+=item close (TEXT)
+
+=cut
+
+sub close {
+    my ($self, $text, %args) = @_;
+    # $self->assign
+}
+
+=cut
+
+
+    $tktdata{'1000000156'} = $text;                 # 'Resolution'
+    $tktdata{'1000005261'} = time;                  # 'Resolution Date'
+    $tktdata{'7'}          = 4;                     # 'Status' = "Resolved"
+    $tktdata{'1000000215'} = 11000;                 # 'Reported Source'
+    $tktdata{'1000000150'} = 17000;                 # "No Further Action Required"
+    # Not doing 1000000642, "Time Spent"
+
+=cut
+
+sub get_incnum {
+    my ($self, %args) = @_;
+    my ($parent, $session) = $self->parent_and_session (%args);
+
+    return $self->inc_num if defined $self->inc_num;
+    if (! $self->ticketgen) {
+        my %args = ('db' => $parent);
+
+        my $ticketgen = Remedy::TicketGen->create (%args) or $self->error 
+            ("couldn't create new ticket number: " .  $session->error );
+        $ticketgen->description ($args{'description'} || $self->default_desc);
+        $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
+
+        print scalar $ticketgen->print_text, "\n";
+        $ticketgen->save ('db' => $parent) 
+            or $self->error ("couldn't create new ticket number: $@");
+        $ticketgen->reload;
+        $self->ticketgen ($ticketgen);
+        $self->inc_num ($ticketgen->inc_num);
+    }
+
+    return $self->ticketgen->inc_num;
+}
+
+sub default_desc { "Created by " . __PACKAGE__ }
 
 =item assignee 
 
@@ -165,9 +216,9 @@ sub assignee {
 
 sub requestor {
     my ($self) = @_;
-    my $name = join (" ", $self->requestor_first_name,
-                          $self->requestor_last_name);
-    return _format_email ($name, $self->requestor_email);
+    my $name = join (" ", $self->requestor_first_name || '',
+                          $self->requestor_last_name || '');
+    return _format_email ($name, $self->requestor_email || '');
 }
 
 =item text_assignee ()
@@ -190,7 +241,17 @@ sub text_assignee {
 
 =cut
 
-sub text_audit {}
+sub text_audit {
+    my ($self, %args) = @_;
+    my (@return, $count);
+    foreach my $audit ($self->audit (%args)) { 
+        push @return, '' if $count;
+        push @return, "Audit Entry " . ++$count;
+        push @return, ($audit->print_text);
+    }
+    return "No audit entries" unless $count;
+    return wantarray ? @return : join ("\n", @return, '');
+}
 
 =item text_description ()
 
@@ -237,9 +298,9 @@ sub text_resolution {
 }
 
 sub text_worklog {
-    my ($self) = @_;
+    my ($self, %args) = @_;
     my (@return, $count);
-    foreach my $worklog ($self->worklog) { 
+    foreach my $worklog ($self->worklog (%args)) { 
         push @return, '' if $count;
         push @return, "Work Log Entry " . ++$count;
         push @return, ($worklog->print_text);
@@ -247,6 +308,7 @@ sub text_worklog {
     return unless $count;
     return wantarray ? @return : join ("\n", @return, '');
 }
+
 
 sub text_requestor {
     my ($self) = @_;
@@ -263,15 +325,40 @@ sub text_requestor {
     return wantarray ? @return : join ("\n", @return, '');
 }
 
+=back
+
+=cut
+
+##############################################################################
+### Related Classes
+##############################################################################
+
+=head2 Related Classes
+
+=over 4
+
+=item audit ()
+
+=cut
+
+sub audit {
+    my ($self, %args) = @_;
+    return unless $self->inc_num;
+    my $parent = $self->parent_or_die (%args);
+    return Remedy::Audit->read ('db' => $parent, 'IncNum' => $self->inc_num, 
+        %args);
+}
+
 =item worklog ()
 
 =cut
 
 sub worklog {
     my ($self, %args) = @_;
+    return unless $self->inc_num;
     my $parent = $self->parent_or_die (%args);
-    return Remedy::WorkLog->select ('db' => $parent, 
-        'IncNum' => $self->inc_num, %args);
+    return Remedy::WorkLog->read ('db' => $parent, 'IncNum' => $self->inc_num, 
+        %args);
 }
 
 =back
@@ -367,17 +454,19 @@ sub limit {
 =cut
 
 sub print_text {
-    my ($self) = @_;
+    my ($self, %args) = @_;
+    my $parent  = $self->parent_or_die (%args);
+    my $session = $self->session_or_die (%args);
 
     my @return;
-    push @return, ($self->text_primary);
-    push @return, '', ($self->text_requestor);
-    push @return, '', ($self->text_assignee);
-    push @return, '', ($self->text_description);
-    if (my @worklog = ($self->text_worklog)) { 
+    push @return, ($self->text_primary (%args));
+    push @return, '', ($self->text_requestor (%args));
+    push @return, '', ($self->text_assignee (%args));
+    push @return, '', ($self->text_description (%args));
+    if (my @worklog = ($self->text_worklog (%args))) { 
         push @return, '', @worklog;
     }
-    if (my @resolution = ($self->text_resolution)) { 
+    if (my @resolution = ($self->text_resolution (%args))) { 
         push @return, '', @resolution;
     }
 
