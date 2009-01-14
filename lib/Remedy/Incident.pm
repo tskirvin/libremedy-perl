@@ -1,22 +1,22 @@
-package Remedy::Ticket;
+package Remedy::Incident;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Ticket - Support Group Association
+Remedy::Incident - Support Group Association
 
 =head1 SYNOPSIS
 
-use Remedy::Ticket;
+use Remedy::Incident;
 
 # $remedy is a Remedy object
 [...]
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Ticket maps users (the B<User> table) to support groups
+Stanfor::Remedy::Incident maps users (the B<User> table) to support groups
 (B<Group>).
 
 =cut
@@ -35,92 +35,11 @@ impact, etc of the ticket; but there are a few other places for customization.
 =item $DOMAIN
 
 Added to the end of incomplete email addresses.  Defaults to 'stanford.edu'.
+Should actually  be put somewhere else... I'll keep working on it.
 
 =cut
 
 our $DOMAIN = 'stanford.edu';
-
-=item %IMPACT
-
-=cut
-
-our %IMPACT = ( 
-       0 => "(not set)",
-    1000 => "Extensive", 
-    2000 => "Significant",
-    3000 => "Moderate",  
-    4000 => "Minor",
-);
-
-=item %PRIORITY
-
-=cut
-
-our %PRIORITY = (
-    -1 => "(not set)",
-     0 => "Critical",
-     1 => "High",
-     2 => "Medium",
-     3 => "Low",
-);
-
-=item %STATUS
-
-=cut
-
-our %STATUS = (
-    -1 => "(not set)",
-     0 => "New",
-     1 => "Assigned",
-     2 => "In Progress",
-     3 => "Pending",
-     4 => "Resolved",
-     5 => "Closed",
-     6 => "Cancelled",
-);
-
-=item %URGENCY
-
-=cut
-
-our %URGENCY = (
-       0 => "(not set)",
-    1000 => "Critical", 
-    2000 => "High",
-    3000 => "Medium",  
-    4000 => "Low",
-);
-
-=item %STATUS_REASON
-
-=cut
-
-our %STATUS_REASON = (
-        0 => "(not set)",
-     1000 => "Infrastructure Change Created",
-     2000 => "Local Site Action Required",
-     3000 => "Purchase Order Approval",
-     4000 => "Registration Approval",
-     5000 => "Supplier Delivery",
-     6000 => "Support Contact Hold",
-     7000 => "Third Party Vendor Action Required",
-     8000 => "Client Action Required",
-     9000 => "Infrastructure Change",
-    10000 => "Request",
-    11000 => "Future Enhancement",
-    12000 => "Pending Original Incident",
-    13000 => "Client Hold",
-    14000 => "Monitoring Incident",
-    15000 => "Customer Follow-up Required",
-    16000 => "Temporary Corrective Action",
-    17000 => "No Further Action Required",
-    18000 => "Resolved by Original Incident",
-    19000 => "Automatic Resolution Reported",
-    20000 => "No Longer a Causal CI",
-    30001 => "Waiting for Pre-Req",
-    30002 => "Waiting for Billing",
-    30003 => "No Response from Customer",
-);
 
 =back
 
@@ -135,14 +54,13 @@ use warnings;
 
 use POSIX qw/strftime/;
 
-use Remedy;
 use Remedy::Audit;
 use Remedy::Form;
 use Remedy::TicketGen;
 use Remedy::WorkLog;
 
-our @ISA = (Remedy::Form::init_struct (__PACKAGE__, 'ticketgen' =>
-    'Remedy::TicketGen'), 'Remedy::Form');
+our @ISA = (Remedy::Form::init_struct (__PACKAGE__, 
+    'ticketgen' => 'Remedy::TicketGen'), 'Remedy::Form');
 
 ##############################################################################
 ### Subroutines
@@ -164,7 +82,6 @@ sub close {
 }
 
 =cut
-
 
     $tktdata{'1000000156'} = $text;                 # 'Resolution'
     $tktdata{'1000005261'} = time;                  # 'Resolution Date'
@@ -232,7 +149,7 @@ sub text_assignee {
         {'minwidth' => 20, 'prefix' => '  '}, 
         'Group'         => $self->assignee_group || "(unassigned)",
         'Name'          => $self->assignee,
-        'Last Modified' => $self->format_date ({}, $self->date_modified),
+        'Last Modified' => $self->format_date ($self->date_modified),
     );
     return wantarray ? @return : join ("\n", @return, '');
 }
@@ -249,7 +166,7 @@ sub text_audit {
         push @return, "Audit Entry " . ++$count;
         push @return, ($audit->print_text);
     }
-    return "No audit entries" unless $count;
+    return unless $count;
     return wantarray ? @return : join ("\n", @return, '');
 }
 
@@ -261,22 +178,23 @@ sub text_description {
     my ($self) = @_;
     my @return = "User-Provided Description";
     push @return, $self->format_text ({'prefix' => '  '},
-        $self->description);
+        $self->description || '(none)');
     return wantarray ? @return : join ("\n", @return, '');
 }
 
 sub text_primary {
-    my ($self) = @_;
+    my ($self, %args) = @_;
     my @return = "Primary Ticket Information";
+    # print $self->form->as_string;
     push @return, $self->format_text_field ( 
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Ticket'        => $self->inc_num || "(none)", 
+        'Ticket'        => $self->inc_num       || "(none set)", 
         'Summary'       => $self->summary,
-        'Status'        => $STATUS{$self->status || -1},
-        'Status Reason' => $STATUS_REASON{$self->status_reason || 0},
-        'Submitted'     => $self->format_date ({}, $self->date_submit),
-        'Urgency'       => $URGENCY{$self->urgency || 0},
-        'Priority'      => $PRIORITY{$self->priority || -1},
+        'Status'        => $self->status        || '(not set/invalid)',
+        'Status Reason' => $self->status_reason || '(not set)',
+        'Submitted'     => $self->format_date ($self->date_submit),
+        'Urgency'       => $self->urgency       || '(not set)',
+        'Priority'      => $self->priority      || '(not set)',
         'Incident Type' => $self->incident_type || "(none)",
     );
 
@@ -290,7 +208,7 @@ sub text_resolution {
     my $resolution= $self->resolution || return;
     push @return, $self->format_text_field ( 
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Date' => $self->format_date ({}, $self->date_resolution),
+        'Date' => $self->format_date ($self->date_resolution),
     );
     push @return, '', $self->format_text ({'prefix' => '  '}, $resolution);
 
@@ -344,9 +262,8 @@ sub text_requestor {
 sub audit {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    my $parent = $self->parent_or_die (%args);
-    return Remedy::Audit->read ('db' => $parent, 'IncNum' => $self->inc_num, 
-        %args);
+    return Remedy::Audit->read ('db' => $self->parent_or_die (%args),
+        'EID' => $self->id, %args);
 }
 
 =item worklog ()
@@ -356,9 +273,31 @@ sub audit {
 sub worklog {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    my $parent = $self->parent_or_die (%args);
-    return Remedy::WorkLog->read ('db' => $parent, 'IncNum' => $self->inc_num, 
-        %args);
+    return Remedy::WorkLog->read ('db' => $self->parent_or_die (%args),
+        'EID' => $self->inc_num, %args);
+}
+
+=item worklog_create ()
+
+Creates a new worklog entry, pre-populated with 
+
+=over 4
+
+=item time (TIME)
+
+=back
+
+=cut
+
+sub worklog_create {
+    my ($self, %args) = @_;
+    return unless $self->inc_num;
+    my $worklog = Remedy::WorkLog->create (
+        'db' => $self->parent_or_die (%args), %args);
+    $worklog->inc_num ($self->inc_num);
+    $worklog->date_submit ($args{'time'} || time);
+    # add a category as well
+    return $worklog;
 }
 
 =back
@@ -485,28 +424,16 @@ sub summary_text {
     my $summary = $self->summary || "";
     map { s/\s+$// } $summary, $group, $assign, $request;
 
-    my $update = _format_date ($self->date_modified);
-    my $create = _format_date ($self->date_submit);
-
-    my $status = $self->status;
-    $status = '-1' unless defined $status;
+    my $update = $self->date_modified;
+    my $create = $self->date_submit;
 
     my @return;
-    push @return, sprintf ("%-8s   %-8s   %-8s   %-32s  %12s",
-        $inc_num, $request, $assign, $group, $STATUS{$status});
+    push @return, sprintf ("%-8s   %-8s   %-8s   %-32s  %12s", 
+        $inc_num, $request, $assign, $group, $self->status || '(not set)');
     push @return, sprintf ("  Created: %s   Updated: %s", $create, $update);
     push @return, sprintf ("  Summary: %s", $summary);
 
     return wantarray ? @return : join ("\n", @return, '');
-}
-
-sub _format_date {
-    my ($time) = @_;
-    if (defined $time) { 
-        return strftime ("%Y-%m-%d %H:%M:%S", localtime ($time)) 
-    } else { 
-        return sprintf ("%20s", "(unknown)");
-    }
 }
 
 

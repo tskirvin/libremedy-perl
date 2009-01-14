@@ -1,99 +1,102 @@
 package Remedy::User;
-our $VERSION = "0.12";  
+our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::User - basic API interface
+Remedy::User - ticket-generation table
 
 =head1 SYNOPSIS
 
-  use Remedy;
+    use Remedy;
+    use Remedy::User;
 
-See the various sub-scripts for more details.
+    [...]
 
 =head1 DESCRIPTION
 
-Remedy is meant to be a central repository of functions to read and,
-in some cases, modify tickets in our local trouble ticket system.  It is
-converted from some scripts for previous versions of the system.
+Remedy::User tracks [...] 
+It is a sub-class of B<Stanford::Packages::Form>, so
+most of its functions are described there.
 
 =cut
 
 ##############################################################################
-### Declarations #############################################################
+### Declarations
 ##############################################################################
 
 use strict;
 use warnings;
 
-use Class::Struct;
 use Remedy;
-use Remedy::Table;
+use Remedy::Form;
 
-our @ISA = qw/Remedy::User::Struct Stanford::Remedy::Table/;
-
-struct 'Remedy::User::Struct' => {
-    'parent'    => '$',
-};
+our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
 
 ##############################################################################
-### Subroutines ##############################################################
+### Class::Struct
 ##############################################################################
 
 =head1 FUNCTIONS
 
-=item schema ()
+These 
 
-Returns the data schema.
+=head2 B<Class::Struct> Accessors
 
-=cut
+=over 4
 
-sub name { 'User' }
+=item description ($)
 
-sub schema {
-    return ( 
-                 1 => "Request ID",
-                 2 => "Creator",
-                 3 => "Create Date",
-                 4 => "Assigned To",
-                 5 => "Last Modified By",
-                 6 => "Modified Date",
-                 7 => "Status",
-                 8 => "Full Name",
-                15 => "Status History",
-               101 => "Login Name",
-               102 => "Password",
-               103 => "Email Address",
-               104 => "Group List",
-               108 => "Default Notify Mechanism",
-               109 => "License Type",
-               110 => "Full Text License Type",
-               119 => "Computed Grp List",
-               122 => "Application License",
-               179 => "Unique Identifier",
-         301628400 => "AR Horizontal Line 1",
-         301628500 => "AR Header Text 1",
-         301628600 => "AR System Application Title",
-         301628700 => "Box4",
-         301628800 => "Box5",
-         490000000 => "Instance ID",
-         490000100 => "Object ID" 
-    );
-}
+=item incnum ($)
+
+=item submitter ($)
 
 =back
 
 =cut
 
 ##############################################################################
-### Final Documentation
+### Local Functions 
 ##############################################################################
+
+=head2 B<Remedy::Form Overrides>
+
+=over 4
+
+=item field_map
+
+=cut
+
+sub field_map { 
+}
+
+=item name ()
+
+=cut
+
+sub name {
+    my ($self, %args) = @_;
+    return $self->inc_num;
+}
+
+=item table ()
+
+=cut
+
+sub table { 'User' }
+
+=back
+
+=cut
+
+###############################################################################
+### Final Documentation
+###############################################################################
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
@@ -109,7 +112,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.

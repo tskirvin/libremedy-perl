@@ -21,8 +21,8 @@ our $LOG_TAG = "TKT_SHOW";
 ## What's the default request type?
 our $DEFAULT_TYPE = "base";
 
-# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
-our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
+our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
+# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
 
 our $DEBUG;
 
@@ -77,30 +77,130 @@ if (lc $query eq 'ticket') {
     $type ||= 'tkt';
 
     debug ("Getting $type information about ticket $incnum");
-    my $tkt = $remedy->tkt ($incnum)
+    my $tkt = $remedy->incident ($incnum)
         or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
 
     if ($type =~ /^(all|debug|full)$/i) {
         print "Full information for ", $tkt->inc_num, "\n";
         print scalar $tkt->debug_text;
-    } elsif (lc $type eq 'worklog') { 
-        print "Worklog entries for $incnum\n";
-        # todo
+
     } elsif (lc $type eq 'audit') { 
+        print "Audit trail for ", $tkt->inc_num, "\n";
+        print scalar $tkt->text_audit;
+
+    } elsif (lc $type eq 'worklog') {   # todo
+        print "Worklog entries for ", $tkt->inc_num, "\n";
+        print scalar $tkt->text_worklog;
         # todo
-    } elsif (lc $type eq 'assign') {
-    } elsif (lc $type eq 'close') {
-    } elsif (lc $type eq 'status') {
-    } elsif (lc $type eq 'worklog') {
+
+
+    } elsif (lc $type eq 'assign') {        # assign to a user
+    } elsif (lc $type eq 'close') {         # close the ticket
+    } elsif (lc $type eq 'status') {        # set-status
     } else {
         print scalar $tkt->print_text;
     }
+
+} elsif (lc $query eq 'worklog') { 
+    my ($inc, $text) = @rest;
+    my $incnum = $remedy->parse_incident_number ($inc)
+        or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
+    pod2usage (-verbose => 1) unless defined $incnum;
+
+    debug ("Adding worklog information to ticket $incnum");
+    my $tkt = $remedy->incident ($incnum)
+        or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
+
+    my $worklog = $tkt->worklog_create ();
+
+    # all of this data needs a bit of work, but it's reasonably accurate
+    $worklog->details ($text);
+    $worklog->submitter ($ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown");
+    $worklog->description ("submitted through $0");
+    $worklog->type ('General Information');     # probably ought to come from something else
+    # care about 'time' (3)?
+
+    print scalar $worklog->print_text;
+    if (eval { my $ret = $worklog->save }) {
+        print "Worklog entry " . $worklog->id . " saved\n";        
+        exit 0;
+    } else {
+        error ("Error saving worklog entry: $@");
+    }
+
+} elsif (lc $query eq 'table') {   
+    my ($table) = @rest;
+
+    debug ("Getting all information about table '$table'");
+    my $obj = eval { $remedy->create ($table) };
+    if (defined $obj) { 
+        print scalar $obj->debug_table;
+        exit 0;
+    } else {
+        print "No table '$table'; possible values:\n";
+        foreach ($remedy->registered_classes) { print " * $_\n" }
+        exit 1;
+    }
+    
+# all of this should go to a separate command
+} elsif (lc $query eq 'create') {
+    my ($summary, $category) = @_;
+    print "this is a horrible idea\n";
+
+    my $tkt = $remedy->incident_create ();
+
+    my $incnum = $tkt->get_incnum ('user' => $config->remedy_user,
+        'description' => "created by $0");  # also need status? 
+    $tkt->inc_num ($incnum);
+
+    # we're pulling this info from the command-line and/or environment
+    $tkt->sunet ($ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown");
+    $tkt->summary ('The widget machine has stopped gadgeting.');
+
+    # information that comes from the configuration, but can be overridden
+    $tkt->set ('Company'         => $config->company,
+               'Contact Company' => $config->company);
+
+    # need to set 1000000215 (Reported Source) as well
+
+    # probably want all of this from Remedy somehow?
+    $tkt->set (
+        'First Name'   => 'Tim',
+        'Last Name'    => 'Skirvin',
+        'Phone Number' => '555-555-1234',
+    );
+
+    # probably a combination of decent defaults and command-line
+    $tkt->set (
+        'Categorization Tier 1' => 'Training and Documentation',
+        'Categorization Tier 2' => 'Scheduling', 
+        'Categorization Tier 3' => '* General', 
+    );
+
+    # $tkt->set ('Service Type' => 'User Service Request');   # must be set, need the list later
+    $tkt->set ('Service Type' => 1);   # must be set, need the list later
+
+    print scalar $tkt->print_text;
+    $tkt->save;
+
 
 } elsif (lc $query eq 'computer') { 
 
     foreach my $computer ($remedy->computer) { 
         print scalar $computer->debug_text;
     }
+
+} elsif (lc $query eq 'userinfo') { 
+
+    my $search = 'tskirvin';
+    warn "searching for '$search'\n";
+    
+    foreach my $user ($remedy->user ($search)) { 
+        print scalar $user->debug_text;
+    }
+
+} elsif (lc $query eq 'groupinfo') {
+    
 
 } elsif (lc $query eq 'list') { 
     my ($type, $user, $subtype, $assign, $time);
@@ -112,10 +212,7 @@ if (lc $query eq 'ticket') {
         print scalar $tkt->summary_text;
     }
 
-} elsif (lc $query eq 'worklog') { 
-} elsif (lc $query eq 'group') { 
 
-    
 } else {
     $query ||= '(none)';
     error ("Invalid query type: '$query'");

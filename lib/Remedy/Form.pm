@@ -33,6 +33,8 @@ our $DEBUG = 7;
 ## Number of characters designated for the field name in the debug functions
 our $DEBUG_CHARS = 30;
 
+our %REGISTER;
+
 ##############################################################################
 ### Declarations
 ##############################################################################
@@ -40,6 +42,7 @@ our $DEBUG_CHARS = 30;
 use strict;
 
 use Class::Struct;
+use Date::Parse;
 use POSIX qw/strftime/;
 use Stanford::Remedy::Form;
 use Text::Wrap;
@@ -64,16 +67,78 @@ $Text::Wrap::huge    = 'overflow';
 =cut
 
 sub init_struct {
-    my ($class) = @_;
+    my ($class, %extra) = @_;
     our $new = $class . "::Struct";
 
     my %fields;
     my %map = $class->field_map;
     foreach (keys %map) { $fields{$_} = '$' }
-    struct $new => {'parent' => '$', 'form' => '$', %fields};
+    struct $new => {'parent'    => '$', 
+                    'key_field' => '%', 
+                    'form'      => '$', 
+                    %extra, %fields};
+
+    $REGISTER{$class}++;
 
     return $new;
 }  
+
+sub registered_form {
+    my ($self, $class) = @_;
+    return unless defined $REGISTER{$class};
+    return $class;
+}
+
+sub registered { keys %REGISTER }
+
+sub get {
+    my ($self, $field) = @_;
+    my $form = $self->form || $self->error ('no form');
+    if (my $key = $self->key_field ($field)) { 
+        return $self->$key;
+    } else { 
+        return $self->data_to_human ($field, $form->get_value ($field));
+    }
+}
+
+
+sub set {
+    my ($self, %fields) = @_;
+    my $form = $self->form;
+    foreach my $field (keys %fields) { 
+        my $value = $self->data_to_human ($field, $fields{$field});
+        if (my $key = $self->key_field ($field)) { 
+            $self->$key ($value);
+        }
+        $self->form->set_value ($field, $value);
+    }
+    return $self;
+}
+
+sub human_to_data { 
+    my ($self, $field, $value) = @_;
+    if      ($self->field_is ('enum', $field)) { 
+        my %hash = reverse $self->field_to_values ($field);
+        return $hash{$value};
+    } elsif ($self->field_is ('time', $field)) {
+        return str2time ($value);
+    } else {
+        return $value;
+    }
+}
+
+sub data_to_human { 
+    my ($self, $field, $value) = @_;
+    return unless defined $value;
+    if      ($self->field_is ('enum', $field)) { 
+        my %hash = $self->field_to_values ($field);
+        return $hash{$value};
+    } elsif ($self->field_is ('time', $field)) {
+        return $self->format_date ($value);
+    } else {
+        return $value;
+    }
+}
 
 =back
 
@@ -156,34 +221,35 @@ Attempts to insert the contents of this object into the database.  If
 successful, returns the newly-created item (selected with B<select_uniq ()>);
 on failure, sets an error in the parent object and returns an error.
 
-Note: this only inserts items, it doesn't update existing items.  You 
-probably want to use B<register ()>!
+Note: this only inserts items, it doesn't update existing items.  You probably
+want to use B<save ()>!
 
 =cut
 
 sub insert {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die ('insert', %args);
-    my $db = $parent->db or return $parent->err_undef ("no db connection");
 
-    my %hash;
-    my %map = $self->field_map;
-    foreach my $func (keys %map) {
-        my $field = $map{$func};
+    ## Make sure all data is reflected in the form
+    my $form = $self->form or $self->error ('no form');
+    
+    my $keyhash = $self->key_field;
+    foreach my $key (keys %{$keyhash}) {
+        my $func = $$keyhash{$key};
         my $value = $self->$func;
-        $hash{$field} = $value if defined $value;
+        next unless defined $value;
+        $self->set ($key, $self->$func);
+        # $form->set_value ($key, $self->$func);
     }
-
-    my $err = $db->insert ($self->table, %hash);
-    return $err ? $self->select_uniq ('db' => $parent)
-                : $parent->err_undef ($db->error);
+    
+    my $return = $form->save;
+    $self->reload ();
+    return $return;
 }
 
 =item new_from_form (ENTRY, ARGHASH)
 
 Takes information from I<ENTRY> - the output of a single item from a
-B<Remedy::Database::select ()> call - and creates a new object in
-the appropriate class.
+B<Remedy::select ()> call - and creates a new object in the appropriate class.
 
 Uses two functions - B<field_map ()>, to map fields to function names so we can
 actually move the information over, and B<field_required ()>, which lists the
@@ -193,27 +259,37 @@ Returns the object on success, or undef on failure.
 
 =cut
 
-sub new_from_form {
-    my ($class, $form, %args) = @_;
+sub init {
+    my ($class, %args) = @_;
     my $parent = $class->parent_or_die (%args);
-    return unless ($form && ref $form);
 
     # Create the object, and set the parent class
     my $obj = $class->new;
-    $obj->parent ($parent);
-    $obj->form   ($form);
+    $obj->parent    ($parent);
 
-    my %schema = $class->schema (%args);
-    my %map    = $class->field_map (%args);
-    foreach my $key (keys %map) {
-        my $value = $form->get_value ($map{$key});
-        $obj->$key ($value);
+    my %map = $class->field_map ();
+    foreach my $key (keys %map) { 
+        $obj->key_field ($map{$key}, $key)  
     }
-    foreach my $field ($class->field_required (%args)) {
-        return unless defined $obj->$field;
-    }
-
+    
     return $obj;
+}
+
+sub new {
+
+}
+
+sub reload {
+    my ($self) = @_;
+    return $self->_init_from_form ($self->form);
+}
+
+sub new_from_form {
+    my ($class, $form, %args) = @_;
+    return unless ($form && ref $form);
+    my $obj = $class->init (%args);
+    $obj->form ($form);
+    return $obj->_init_from_form ($form);
 }
 
 =item register (ARGHASH)
@@ -228,25 +304,19 @@ B<parse_register ()>.
 
 =cut
 
-sub register {
+sub save {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die ('register', %args);
-
-    if (my $entry = $self->select_uniq ('db' => $parent, 'select' => '*')) {
-        my ($item, $changes) = $entry->update ($self, 'db' => $parent, %args);
-        return ($item, $changes);
-
-    } else {
-        my $entry = $self->insert ('db' => $parent, %args);
-        return ($entry, 'new entry');
+    if ($self->form && $self->form->get_request_id) { 
+        return $self->update (%args) 
+    } else { 
+        return $self->insert (%args) 
     }
 }
 
+=item read (PARENT, ARGHASH)
 
-=item select (PARENT, ARGHASH)
-
-Searches the database in the B<Remedy> object I<PARENT>, based on
-the arguments in the argument hash I<ARGHASH>:
+Reads from the database in the B<Remedy> object I<PARENT>, based on the
+arguments in the argument hash I<ARGHASH>:
 
 =over 4
 
@@ -278,10 +348,25 @@ If invoked in a scalar context, only returns the first item.
 
 =cut
 
-sub select {
+sub create {
+    my ($class, %args) = @_;
+    my ($parent, $session) = $class->parent_and_session (%args);
+
+    # Create the object
+    my $obj = $class->init ('db' => $parent, %args);
+
+    ## Generate the Remedy form
+    my $form = Stanford::Remedy::Form->new 
+        ('session' => $session, 'name' => $args{'table'} || $class->table) 
+        or $class->error ("couldn't start new form: $@");
+
+    $obj->form ($form);
+    return $obj;
+}
+
+sub read {
     my ($self, %args) = @_;
-    my $parent  = $self->parent_or_die (%args);
-    my $session = $self->session_or_die (%args);
+    my ($parent, $session) = $self->parent_and_session (%args);
 
     ## Generate the Remedy form that we'll use to pull out data
     my $form = Stanford::Remedy::Form->new 
@@ -290,9 +375,11 @@ sub select {
 
     ## Figure out how we're limiting our search; most of the standard search
     ## methods don't currently work.
-
     my $limit = join(" AND ", $self->limit (%args));
-    $parent->warn_level ($DEBUG, "read_where ($limit)");
+    return unless $limit;
+
+    $parent->warn_level ($DEBUG, sprintf ("read_where (%s, %s)", 
+        $self->table, $limit));
     my @entries = $form->read_where ($limit);
     $parent->warn_level ($DEBUG, sprintf ("%d entr%s returned", 
         scalar @entries, scalar @entries == 1 ? 'y' : 'ies'));
@@ -305,6 +392,9 @@ sub select {
     }
     return wantarray ? @return : $return[0];
 }
+
+sub update {}
+sub delete {}
 
 =item select_uniq (ARGHASH)
 
@@ -349,8 +439,7 @@ to use B<register ()>!
 
 sub update {
     my ($self, $new, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
-    my $db = $parent->db or return $parent->err_undef ("no db connection");
+    my ($parent, $session) = $self->parent_and_session (%args);
 
     my %update = $self->diff ($new);
     unless (scalar keys %update) { return wantarray ? ($self => {}) : $self }
@@ -362,8 +451,8 @@ sub update {
         $uniq{$field} = $self->$func;
     }
 
-    unless (my $err = $db->update ($self->table, \%uniq, \%update)) {
-        return wantarray ? (undef => 'error' . $db->error) : undef;
+    unless (my $err = $self->update ($self->table, \%uniq, \%update)) {
+        return wantarray ? (undef => 'error' . $self->error) : undef;
     } else {
         return wantarray ? ($self => \%update) : $self;
     }
@@ -417,8 +506,8 @@ sub format_text {
 }
 
 sub format_date {
-    my ($self, $args, $date) = @_;  
-    return "(unknown time)" unless $date;
+    my ($self, $date) = @_;  
+    return '(unknown time)' unless $date;
     return strftime ('%Y-%m-%d %H:%M:%S', localtime ($date));
 }
 
@@ -545,6 +634,31 @@ sub schema {
     return reverse %{$href};
 }
 
+sub field_to_values {
+    my ($self, $field, %args) = @_;
+    my $formdata = $self->pull_formdata (%args);
+    my $href = $formdata->get_fieldName_to_enumvalues_href () or return;
+    my $values = $href->{$field};
+    return unless defined $values && ref $values;
+    return %{$values};
+}
+
+sub field_is_enum { shift->field_is ('enum', @_) }
+sub field_is_time { shift->field_is ('time', @_) }
+
+sub field_is {
+    my ($self, $type, $field, %args) = @_;
+    return 1 if $self->field_type ($field, %args) eq lc $type;
+    return 0;
+}   
+
+sub field_type {
+    my ($self, $field, %args) = @_;
+    my $formdata = $self->pull_formdata (%args);
+    my $href = $formdata->get_fieldName_to_datatype_href () or return;
+    return lc $href->{$field};
+}
+
 sub pull_formdata {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die (%args);
@@ -610,7 +724,10 @@ something like this:
     FIELD_ID1  FIELD_NAME1  VALUE
     FIELD_ID2  FIELD_NAME2  VALUE
 
-This is all wrapped with B<Text::Wrap> in a vaguely logical manner.
+This is all wrapped with B<Text::Wrap> in a vaguely logical manner. 
+
+TODO: put some of the field numbers back in, at least if they're requested.
+Also, re-create debug_html
 
 =cut
 
@@ -624,23 +741,38 @@ sub debug_text {
     foreach my $id (sort {$a<=>$b} keys %schema) {
         next unless defined $schema{$id};
         my $field = $schema{$id} || "*unknown*";
-        my $value = $form->get_value ($schema{$id});
-        next unless defined $value;
 
+        my $value = $self->get ($schema{$id});
+        next unless defined $value;
         $value =~ s/^\s+|\s+$//g;
-        
-        push @entries, [$field, $value];
+
+        $max{'id'}    = length ($id)    if length ($id)    > $max{'id'};
+        $max{'field'} = length ($field) if length ($field) > $max{'field'};
+
+        push @entries, [$id, $field, $value];
     }
 
+    $max{'field'} = $DEBUG_CHARS if $max{'field'} > $DEBUG_CHARS;
+
     foreach my $entry (@entries) {
-        my $field = join ('', "%-", $DEBUG_CHARS, "s");
-        my $size  = $DEBUG_CHARS + 2;
-        my $form  = " $field  %s";
-        push @return, wrap('', ' ' x ($size + 1), sprintf ($form, @{$entry})); 
+        my ($id, $field, $value) = @{$entry};
+        my $id_field    = '%'  . $max{'id'}    . 'd';
+        my $field_field = '%-' . $max{'field'} . 's';
+        my $size  = $max{'id'} + $max{'field'} + 2;
+        my $form = "$id_field $field_field %s";
+        push @return, wrap ('', ' ' x ($size), 
+            sprintf ($form, $id, $field, $value));
     } 
 
     wantarray ? @return : join ("\n", @return, '');
 }
+
+sub debug_table {
+    my ($self) = @_;
+    return $self->form->as_string ('no_session' => 1);
+}
+
+sub fields_text {}
 
 =item diff (OBJECT)
 
@@ -734,6 +866,12 @@ sub session_or_die {
     return $parent->session;
 }
 
+sub parent_and_session {
+    my ($self, %args) = @_;
+    $args{'count'} ||= 3;
+    return ($self->parent_or_die (%args), $self->session_or_die (%args));
+}
+
 sub error {
     my ($self, $text, $count) = @_;
     my $func = (caller ($count || 1))[3];
@@ -785,6 +923,34 @@ sub parse_register {
 
 =cut
 
+##############################################################################
+### Internal Subroutines
+##############################################################################
+
+### _init_from_form (FORM) 
+# Takes a Stanford::Remedy::Form object, uses it and the basic class 
+# information to (re)populate the Class::Struct fields, and makes sure that 
+# all required fields are set.  This is basically for use after an insert (),
+# select (), or update () to make sure that we're working with viable data.
+sub _init_from_form {
+    my ($self, $form) = @_;
+    my $class = ref $self;
+
+    my %map = $class->field_map ();
+    foreach my $key (keys %map) { 
+        my $field = $map{$key};
+        my $value = $self->data_to_human ($field, $form->get_value ($field));
+        $self->$key ($value);
+    }
+
+    # Make sure that any required fields are set at this point
+    foreach my $field ($class->field_required ()) {
+        return unless defined $self->$field;
+    }
+
+    return $self;
+}
+
 
 ##############################################################################
 ### Final Documentation
@@ -792,7 +958,7 @@ sub parse_register {
 
 =head1 SEE ALSO
 
-Remedy::Ticket(8)
+Remedy::Ticket(8), Stanford::Remedy(8)
 
 =head1 AUTHOR
 

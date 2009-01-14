@@ -12,9 +12,9 @@ Remedy::Worklog - per-ticket worklogs
     use Remedy::Worklog;
 
     # $remedy is a Remedy object
-    my @worklog = Remedy::WorkLog->select (
-        'db' => $remedy, 'IncNum' => 'INC000000002371');
-    for my $wl (@worklog) { print scalar $wl->print_text }
+    my @worklog = Remedy::WorkLog->read ('db' => $remedy, 
+        'EID' => 'INC000000002371');
+    for my $entry (@worklog) { print scalar $entry->print_text }
 
 =head1 DESCRIPTION
 
@@ -31,11 +31,9 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy;
 use Remedy::Form;
 
-our @ISA = (Remedy::Form::init_struct (__PACKAGE__),
-    'Remedy::Form');
+our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
 
 ##############################################################################
 ### Class::Struct
@@ -127,6 +125,7 @@ sub field_map {
     'date_submit'           => 'Work Log Submit Date',
     'submitter'             => 'Work Log Submitter',
     'inc_num'               => 'Incident Number',
+    'type'                  => 'Work Log Type',
     'attach1'               => 'z2AF Work Log01',
     'attach2'               => 'z2AF Work Log02',
     'attach3'               => 'z2AF Work Log03',
@@ -134,15 +133,15 @@ sub field_map {
     'attach5'               => 'z2AF Work Log05',
 }
 
-=item limit (ARGS)
+=item limit (ARGHASH)
 
 Takes the following arguments:
 
 =over 4
 
-=item IncRef I<incref>
+=item EID I<incref>
 
-If set, then we will just search based on the Incident Number.
+If set, then we will just search based on the Incident Number field.
 
 =back
 
@@ -154,9 +153,9 @@ sub limit {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die (%args);
 
-    if (my $incnum = $args{'IncNum'}) { 
-        my $id = $self->field_to_id ("Incident Number", %args);
-        return "'$id' == \"$incnum\"";
+    if (my $eid = $args{'EID'}) { 
+        my $field = $self->field_to_id ("Incident Number", 'db' => $parent);
+        return "'$field' == \"$eid\"";
     }
 
     return $self->limit_basic (%args);
@@ -176,8 +175,9 @@ sub print_text {
     my @return = $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
         'Submitter'   => $self->submitter,
-        'Date'        => $self->format_date ({}, $self->date_submit),
+        'Date'        => $self->format_date ($self->date_submit),
         'Description' => $self->description,
+        'Type'        => $self->type,
         'Attachments' => $self->attachments || 0);
 
     push @return, '', $self->format_text ({'prefix' => '  '},
@@ -187,6 +187,8 @@ sub print_text {
 }
 
 =item table ()
+
+'HPD:WorkLog'
 
 =cut
 

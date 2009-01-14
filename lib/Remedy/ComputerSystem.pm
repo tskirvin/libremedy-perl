@@ -126,7 +126,7 @@ Defaults to B<limit_basic ()>.
 
 sub limit {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die ('limit', %args);
+    my $parent = $self->parent_or_die (%args);
 
     if (my $incnum = $args{'IncNum'}) { 
         my $id = $self->field_to_id ("Incident Number");
@@ -150,7 +150,7 @@ sub print_text {
     my @return = $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
         'Submitter'   => $self->submitter,
-        'Date'        => $self->format_date ({}, $self->date_submit),
+        'Date'        => $self->format_date ($self->date_submit),
         'Description' => $self->description,
         'Attachments' => $self->attachments || 0);
 

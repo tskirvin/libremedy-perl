@@ -1,5 +1,5 @@
 package Remedy;
-our $VERSION = "0.12";
+our $VERSION = "0.13";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
@@ -15,8 +15,8 @@ Remedy - basic OO interface to the Remedy API
 
 =head1 DESCRIPTION
 
-Remedy offers an object-oriented interface to the ARSPerl Remedy API,
-usable to read and modify tickets.  
+Remedy offers an object-oriented interface to the ARSPerl Remedy API, usable to
+read and modify tickets.
 
 =cut
 
@@ -26,6 +26,8 @@ usable to read and modify tickets.
 
 # variables that must die
 use vars qw/$TAG %remedy_HelpDesk %AR_SCHEMA %remedy_SGA %FILE_LOC/;
+
+use vars qw/%TABLES/;
 
 ##############################################################################
 ### Declarations #############################################################
@@ -39,10 +41,11 @@ use POSIX qw/strftime/;
 
 use Stanford::Remedy::Form;
 use Stanford::Remedy::Session;
-use Stanford::Remedy::Incident;
 
 use Remedy::Config;
-use Remedy::Ticket;
+use Remedy::Incident;
+use Remedy::User;
+use Remedy::Form;
 
 struct 'Remedy' => {
     'config'   => 'Remedy::Config',
@@ -109,7 +112,7 @@ sub connect {
 
 sub list {
     my ($self, %args) = @_;
-    Remedy::Ticket->select ('db' => $self, %args);
+    Remedy::Incident->read ('db' => $self, %args);
 }
 
 =item parse_incident_number (NUMBER)
@@ -142,71 +145,6 @@ sub parse_incident_number {
 =back
 
 =over 4
-
-=item audit_entries (AR, INC_NUM)
-
-Takes the incident number, and loads all audit information related to the
-incident.  Returns the information as a hash or hashref (depending on context),
-where the key is the relevant EntryID (suitable for sorting) and the value is a
-hashref containing field ID/value pairs.
-
-sub audit_entries {
-    my ($self, $inc_num) = @_;
-    my $ars = $self->ars;
-
-    my $table = Remedy::Audit->table;
-
-    my $eid = $self->eid_from_incnum ($inc_num);
-    # Search by incident number - field 1000000161
-    my $search = "'450' = \"$eid\"";
-    my $query = ars_LoadQualifier($ars, $table, $search, 0);
-
-    my %return;
-
-    my %entries = $ars->query (
-                                             $self->count, 0);
-    foreach my $key (sort keys %entries) {
-        next unless $key;
-
-        (my %full = ars_GetEntry($ars, $self->schema, $key))
-                || (warn "Error: $ars_errstr\n" and return);
-        my $hash = {};
-        foreach my $field (sort {$a<=>$b} keys %full) {
-            $$hash{$field} = $full{$field};
-        }
-        $return{$key} = $hash;
-    }
-
-    wantarray ? %return : \%return;
-}
-
-=item eid_from_incnum (AR, INC_NUM)
-
-Given a ticket 'INC' number (the 15-digit thing), gets the entry ID for that
-ticket.  Returns it if possible, undef otherwise.
-
-
-sub eid_from_incnum {
-    my ($self, $inc_num) = @_;
-
-    my $qs = "\'1000000161\' = \"$inc_num\"";
-    my $lq = ars_LoadQualifier($self, $AR_SCHEMA{'HelpDesk'}, $qs);
-    $self->remedy_log($TAG, "inc_num lq AR err: $ars_errstr") unless $lq;
-
-    my @entries = ars_GetListEntry ($self, $AR_SCHEMA{'HelpDesk'},
-                                    $lq, 0, 0, '1', 1);
-
-    unless (scalar @entries) {
-#        remedy_log($ars_errstr ? "getentry eid AR err: $ars_errstr"
-#                               : "getentry eid AR err: no entries");
-        return;
-    }
-
-    # Returns the first matching entry
-    my $eid = shift @entries;
-    $self->remedy_log_iflevel (5, $TAG, "$inc_num maps to entryid: $eid");
-    return $eid;
-}
 
 =item group_from_incnum (AR, INC_NUM)
 
@@ -325,67 +263,6 @@ sub show_supportgroupinfo_full {
     wantarray ? @return : join("\n", @return, '');
 }
 
-=item show_tkt_audit (AR, TKTHASHREF)
-
-Shows all raw information about the worklog for the given C<TKTHASHREF>,
-which is the result of an ars_GetEntry() call.
-
-Returns either an array of strings or a pre-formatted string.
-
-=cut
-
-sub show_tkt_audit {
-    my ($ar, $tkthash) = @_;
-    remedy_log_iflevel(3, $TAG, "Entering show_tkt_worklog");
-
-    my $inc_num = _helpdesk($tkthash, "Incident Number");
-    my @return = "Audit Trail for $inc_num";
-
-    my $count = 1;
-    my %entries = audit_entries($ar, $inc_num);
-    foreach my $key (sort keys %entries) {
-        my $entry = $entries{$key};
-        push @return, '', "Entry " . $count++;
-        push @return, text_tkt_audit($ar, $entry);
-    }
-    unless (scalar %entries) { push @return, "  No Entries" }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item show_tkt_worklog (AR, TKTHASHREF)
-
-Shows all raw information about the worklog for the given C<TKTHASHREF>,
-which is the result of an ars_GetEntry() call.
-
-Returns either an array of strings or a pre-formatted string.
-
-=cut
-
-sub show_tkt_worklog {
-    my ($ar, $tkthash) = @_;
-    remedy_log_iflevel(3, $TAG, "Entering show_tkt_worklog");
-
-    my $inc_num = _helpdesk($tkthash, "Incident Number");
-    my @return = "Worklog Entries for $inc_num";
-
-    my $count = 1;
-    my %entries = worklog_entries($ar, $inc_num);
-    foreach my $key (sort keys %entries) {
-        my $entry = $entries{$key};
-        push @return, '', "Entry " . $count++;
-        foreach my $field (sort {$a<=>$b} keys %{$entry}) {
-            $$entry{$field} ||= "";
-    #        my $value = $remedy_HDWorkLog{$field};
-    #           $value = "*unknown*" unless defined $value;
-    #        push @return, sprintf ($FORM_DEBUG_TEXT, $field, $value,
-    #                                   $$entry{$field} || "(none)");
-        }
-    }
-    unless (scalar %entries) { push @return, "  No Entries" }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-
 =item show_userinfo_full (AR, SUNetID)
 
 =cut
@@ -413,25 +290,6 @@ sub summary_search {
         my $entry = $entries{$key};
         push @return, scalar $self->summary_tkt ($entry);
     }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item text_tkt_audit (AR, AUDITHASH)
-
-Returns a short version of the audit trail that might be somewhat
-human-readable.
-
-=cut
-
-sub text_tkt_audit {
-    my ($ar, $audhash) = @_;
-    my @return;
-    push @return, _format_text("Time", _form_date(
-                                  _audit($audhash, "Create Time")));
-    push @return, _format_text("Person", _audit($audhash, "Change Person"));
-    my @fields = split(';', _audit($audhash, "Changed Fields"));
-    my @parse = grep { $_ } @fields;
-    push @return, _format_text("Changed Fields", join("; ", @parse));
     wantarray ? @return : join("\n", @return, '');
 }
 
@@ -574,7 +432,7 @@ Infrastructure") AND ('Status*' = "Assigned" OR 'Status*' = "In Progress" OR
 
 =cut
 
-=item tkt (AR, INCNUM)
+=item incident (AR, INCNUM)
 
 Pulls full data about a ticket from C<INCNUM>, the incident number that is the
 general key to the tickets.  Returns C<TKTHASH> information, a hashref that is
@@ -582,16 +440,35 @@ used by other functions.
 
 =cut
 
-sub tkt {
+sub incident {
     my ($self, $incnum) = @_;
-    # $self->init_form ('Remedy::Ticket');
-    Remedy::Ticket->select ('db' => $self, 'IncNum' => $incnum);
+    Remedy::Incident->read ('db' => $self, 'IncNum' => $incnum);
 }
+
+=item incident_create ()
+
+=cut
+
+sub incident_create { shift->create ('Remedy::Incident', @_) }
 
 sub computer {
     my ($self, $cmdb) = @_;
-    Remedy::ComputerSystem->select ('db' => $self, 'Name' => $cmdb);
+    Remedy::ComputerSystem->read ('db' => $self, 'Name' => $cmdb);
 }
+
+sub user {
+    my ($self, $netid) = @_;
+    Remedy::User->read ('db' => $self, 'Login Name' => $netid);
+}
+
+sub create {
+    my ($self, $form) = @_;
+    my $registered = Remedy::Form->registered_form ($form);
+    $self->error ("No such form: '$form'") unless defined $registered;
+    $registered->create ('db' => $self);
+}
+
+sub registered_classes { Remedy::Form->registered }
 
 sub init_form {
     my ($self, $class, @rest) = @_;
@@ -834,146 +711,7 @@ sub error { die shift->warn_level (0, @_), "\n" }
 ### Internal Subroutines ######################################################
 ###############################################################################
 
-=cut
-
-### _date_remedy(TIME)
-# We sort by seconds-since-epoch, apparently.
-# Remedy database.  Note that this does, in fact, suck - two letter year?
-
-sub _date_remedy { my ($time) = @_; $time ||= time; return $time; }
-
-### _format_text (TEXT, VALUE)
-# Returns a formatted string of the form "TEXT: VALUE", based on a pre-set
-# format string.  Used for basic text layout.
-
-sub _format_text {
-    my ($text, @value) = @_;
-    my $value = scalar @value ? join(" ", @value) : "";
-    return "" unless (defined $text && defined $value);
-    sprintf($FORM_TKT_TEXT, $text ? "$text:" : "", $value);
-}
-
-### _format_worklog_text (TEXT, VALUE)
-# Returns a formatted string of the form "TEXT: VALUE", based on a pre-set
-# format string.  Used for basic text layout of worklogs.
-
-sub _format_worklog_text {
-    my ($text, $value) = @_;
-    return "" unless (defined $text && defined $value);
-    sprintf($FORM_WORKLOG_TEXT, "$text:", $value);
-}
-
-### _form_array (ENTRY , ARRAYREF)
-# Gets item ENTRY out of the array ARRAYREF, or some explanatory text if none
-# exists.
-
-sub _form_array {
-    my ($value, $arrayref) = @_;
-    return "not an array" unless ref $arrayref;
-    return "(not set)" unless defined $value;
-    defined $$arrayref[$value] ? $$arrayref[$value] : "No entry for '$value'";
-}
-
-### _form_date (DATE)
-# Formats a date string from DATE.
-
-sub _form_date {
-    my ($value) = @_;
-    $value ? _timedate ($value) : "(unknown)";
-}
-
-### _form_hash (ENTRY, HASHREF)
-# Gets $HASHREF{$ENTRY} or some explanatory text if none exists.
-
-sub _form_hash {
-    my ($value, $hashref) = @_;
-    return "" unless ref $hashref;
-    $value ||= 0;
-    defined $$hashref{$value} ? $$hashref{$value}
-                              : "No entry for '$value'";
-}
-
-### _form_name_and_email (NAME, EMAIL)
-# Forms consistent name-and-email field, like in a 'From' header.
-
-sub _form_name_and_email {
-    my ($name, $email) = @_;
-    $name = "(unknown)" unless $email;
-    if ($email) { $email .= '@stanford.edu' unless $email =~ /@/ }
-    else        { $email = ""; }
-    $email ? "$name <$email>" : "$name";
-}
-
-### _helpdesk  (TKTHASHREF, FIELD)
-### _userinfo  (TKTHASHREF, FIELD)
-### _groupinfo (TKTHASHREF, FIELD)
-# Using _hashinfo(), returns either the value in TKTHASHREF based on FIELD
-# from the appropriate remedy_* hash, or undef.
-#sub _audit     { _hashinfo(\%remedy_Audit, @_) }
-#sub _groupinfo { _hashinfo(\%remedy_Group, @_) }
-#sub _userinfo  { _hashinfo(\%remedy_User, @_) }
-#sub _helpdesk  { _hashinfo(\%remedy_HelpDesk, @_) }
-#sub _suppgrp   { _hashinfo(\%remedy_SupportGroup, @_) }
-#sub _sgainfo   { _hashinfo(\%remedy_SGA, @_) }
-
-#sub _hashinfo {
-#    my ($hash, $tkthash, $text) = @_;
-#    return unless (ref $hash && ref $tkthash && defined $text);
-#    return unless $$hash{$text};
-#    $tkthash->{$$hash{$text}} || undef;
-#}
-
-### _info_from_incnum (AR, FIELD, INCNUM)
-# Searches the HelpDesk field for information about a ticket INCNUM, and pulls
-# information from a specific FIELD.  Depending on context, returns either a list
-# of matching values, or just the first value (in a scalar context).
-
-sub _info_from_incnum {
-    my ($ar, $field, $inc_num) = @_;
-    my $fieldid = $remedy_HelpDesk{$field} || return;
-
-    my $qs = "\'1000000161\' = \"$inc_num\"";
-    my $lq = ars_LoadQualifier($ar, $AR_SCHEMA{'HelpDesk'}, $qs);
-    my @entries = ars_GetListEntryWithFields($ar, $AR_SCHEMA{'HelpDesk'},
-                                   $lq, 0, 0);
-    my (@return, $return);
-    return unless (scalar @entries);
-    while (@entries) {
-        my $key = shift @entries;  my $value = shift @entries;
-        next unless (defined $key && $value && ref $value);
-        $return = $value->{$fieldid} unless defined $return;
-        push @return, $value->{$fieldid};
-    }
-
-    # Returns the first matching entry
-    wantarray ? @return : $return;
-}
-
-### _show_hashinfo_debug (AR, HASHREF, ENTRIES)
-# Wrapper to show information about a given table in a consistent form, based
-# on $FORM_DEBUG_TEXT.
-
-sub _show_hashinfo_debug {
-    my ($ar, $translate, %entries) = @_;
-
-    my @return;
-    foreach my $key (sort keys %entries) {
-        my $entry = $entries{$key};
-        foreach my $field (sort {$a<=>$b} keys %{$entry}) {
-            $$entry{$field} ||= "";
-            my $value = $$translate{$field};
-               $value = "*unknown*" unless defined $value;
-            push @return, sprintf ($FORM_DEBUG_TEXT, $field, $value,
-                                       $$entry{$field} || "(none)");
-        }
-    }
-    unless (scalar %entries) { push @return, "  No Entries" }
-    wantarray ? @return : join("\n", @return);
-}
-
-=cut
-
-1;
+sub DESTROY { if (my $session = shift->session) { $session->disconnect } }
 
 ###############################################################################
 ### Final Documentation #######################################################
@@ -986,7 +724,7 @@ B<ARS>
 =head1 SEE ALSO
 
 B<remedy-assign>, B<remedy-close>, B<remedy-list>, B<remedy-ticket>,
-B<remedy-worklog>, B<remedy-wrapper>
+B<remedy-wrapper>
 
 =head1 TODO
 
@@ -1013,3 +751,5 @@ Copyright 2008-2009, Tim Skirvin and Board of Trustees, Leland Stanford
 Jr. University
 
 =cut
+
+1;
