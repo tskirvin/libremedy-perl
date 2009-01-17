@@ -1,24 +1,25 @@
-package Remedy::User;
-our $VERSION = "0.12";
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
+package Remedy::Department;
+our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::User - ticket-generation table
+Remedy::Department - Department form
 
 =head1 SYNOPSIS
 
-    use Remedy;
-    use Remedy::User;
+    use Remedy::Department;
 
-    [...]
+    # $remedy is a Remedy object
+    foreach my $dept (Remedy::Department->read ('db' => $remedy, 'all' => 1)) {
+        print scalar $dept->print_text;
+    }  
 
 =head1 DESCRIPTION
 
-Remedy::User tracks [...] 
-It is a sub-class of B<Stanford::Packages::Form>, so
-most of its functions are described there.
+Remedy::Department manages the I<CTM:People Organization> form, which describes
+the organization chart down to the department level.  It is a sub-class of
+B<Remedy::Table>, so most of its functions are described there.
 
 =cut
 
@@ -29,9 +30,9 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table;
+use Remedy::Table qw/init_struct/;
 
-our @ISA = (Remedy::Table::init_struct (__PACKAGE__));
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
 ### Class::Struct
@@ -39,21 +40,36 @@ our @ISA = (Remedy::Table::init_struct (__PACKAGE__));
 
 =head1 FUNCTIONS
 
-These 
-
 =head2 B<Class::Struct> Accessors
 
 =over 4
 
-=item description ($)
+=item id (I<People Organization ID>)
 
-=item incnum ($)
+Internal ID of the entry
 
-=item submitter ($)
+=item company (I<Company>)
+
+Company name, ie I<Stanford University>
+
+=item organization (I<Organization>)
+
+Organization name, ie I<Vice President for Business Affairs>
+
+=item department (I<Department>)
+
+Department name, ie I<IT Services>
 
 =back
 
 =cut
+
+sub field_map { 
+    'id'           => "People Organization ID",
+    'company'      => "Company",
+    'organization' => "Organization",
+    'department'   => "Department",
+}
 
 ##############################################################################
 ### Local Functions 
@@ -63,47 +79,30 @@ These
 
 =over 4
 
-=item field_map
-
-=cut
-
-sub field_map { 
-    'netid'      => "Login Name",
-    'name'       => "Full Name",
-    'group_list' => 'Group List',
-}
-
-=item name ()
+=item print_text ()
 
 =cut
 
 sub print_text {
     my ($self) = @_;
-    my $user = $self->netid;
-    return unless $user;
-    my @groups = $self->groups;
+    my @return = "Department information for '" . $self->department . "'";
 
-    my @return = "User information for '$user'";
-    
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Full Name'   => $self->name,
-        'SUNet ID'    => $self->netid || "(none)",
-        'Groups'      => scalar @groups || "(none)",    # should be the number of groups
+        'ID'           => $self->id,
+        'Company'      => $self->company,
+        'Organization' => $self->organization,
+        'Department'   => $self->department,
     );
-    foreach my $group (@groups) {
-        push @return, "    $group"
-    }
+
     return wantarray ? @return : join ("\n", @return, '');
 }
-
-sub groups { 0 }    # actually parse SGA to get this information
 
 =item table ()
 
 =cut
 
-sub table { 'User' }
+sub table { 'CTM:People Organization' }
 
 =back
 

@@ -1,5 +1,5 @@
 package Remedy::Audit;
-our $VERSION = "0.10";
+our $VERSION = "0.50";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -11,15 +11,16 @@ Remedy::Audit - per-ticket worklogs
     use Remedy::Audit;
 
     # $remedy is a Remedy object
-    my @audit = Remedy::Audit->read (
-        'db' => $remedy, 'IncNum' => 'INC000000002371');
+    my @audit = Remedy::Audit->read ('db' => $remedy, 
+        'EID' => 'INC000000002371');
     for my $item (@audit) { print scalar $item->print_text }
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Unix::WorkLog tracks individual work log entries for tickets as part
-of the remedy database.  It is a sub-class of B<Stanford::Packages::Form>, so
-most of its functions are described there.
+Remedy::Audit monitors the automatically-generated audit logs for each
+incident.  It is a sub-class of B<Remedy::Form>, and most of its functionality
+is described there.  It is meant for use with the B<Remedy::Incident> and
+B<Remedy::Task> tables.
 
 =cut
 
@@ -30,42 +31,45 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy;
-use Remedy::Form;
+use Remedy::Table qw/init_struct/;
 
-our @ISA = (Remedy::Form::init_struct (__PACKAGE__), 'Remedy::Form');
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Methods 
 ##############################################################################
 
 =head1 FUNCTIONS
-
-These 
 
 =head2 B<Class::Struct> Accessors
 
 =over 4
 
+=item id ($)
+
+Corresponds to 'Request ID' field.
+
+=item create_time ($)
+
+Corresponds to 'Create Date' field.
+
+=item inc_ref ($)
+
+Corresponds to 'Original Request ID' field.
+
+=item user ($)
+
+Corresponds to 'User' field.
+
+=item fields ($)
+
+Corresponds to 'Fields Changed' field.
+
+=item data ($)
+
+Corresponds to 'Log' field.
+
 =back
-
-=cut
-
-##############################################################################
-### Local Functions 
-##############################################################################
-
-=head2 Local Functions
-
-=over 4
-
-=back
-
-=head2 B<Remedy::Form Overrides>
-
-=over 4
-
-=item field_map
 
 =cut
 
@@ -111,9 +115,8 @@ sub limit {
 
 =item print_text ()
 
-Returns a short list of the salient points of the audit entry - the
-submitter, the submission date, the short description, and the actual text of
-the worklog.
+Returns a short list of the salient points of the audit entry - the creation
+time, the person that made the changes, and a list of changed fields.
 
 =cut
 
@@ -125,7 +128,7 @@ sub print_text {
 
     my @return = $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Time'   => $self->format_date ($self->create_time),
+        'Time'   => $self->create_time,
         'Person' => $self->user,
         'Changed Fields' => join ('; ', @parse),
     );
@@ -133,23 +136,9 @@ sub print_text {
     return wantarray ? @return : join ("\n", @return, '');
 }
 
-sub print_text_old {
-    my ($self, %args) = @_;
-
-    my @return = $self->format_text_field (
-        {'minwidth' => 20, 'prefix' => '  '}, 
-        'Submitter'   => $self->submitter,
-        'Date'        => $self->format_date (self->date_submit),
-        'Description' => $self->description,
-        'Attachments' => $self->attachments || 0);
-
-    push @return, '', $self->format_text ({'prefix' => '  '},
-        $self->details || "No text provided");
-
-    return wantarray ? @return : join ("\n", @return, '');
-}
-
 =item table ()
+
+'HPD:HelpDesk_AuditLogSystem'
 
 =cut
 
@@ -165,7 +154,7 @@ sub table { 'HPD:HelpDesk_AuditLogSystem' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Form>
+B<Class::Struct>, B<Remedy::Table>
 
 =head1 SEE ALSO
 

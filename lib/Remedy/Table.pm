@@ -1,21 +1,21 @@
-package Remedy::Form;
+package Remedy::Table;
 our $VERSION = "0.50";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Form - shared functions for all database tables
+Remedy::Table - shared functions for all database tables
 
 =head1 SYNOPSIS
 
-    use Remedy::Form;
+    use Remedy::Table;
 
 This is meant to be used as a template for other modules; please see the 
 man pages listed under SEE ALSO for more usage information.
 
 =head1 DESCRIPTION
 
-Remedy::Form implements a consistent set of shared functions used by the
+Remedy::Table implements a consistent set of shared functions used by the
 'table' modules under B<Remedy> - System, Package, SystemPackage, and History.
 These functions include interfaces to B<Remedy::Database>, functions that store
 table-specific information such as field names and default sorting, and basic
@@ -43,12 +43,17 @@ use strict;
 
 use Class::Struct;
 use Date::Parse;
+use Exporter;
 use POSIX qw/strftime/;
 use Stanford::Remedy::Form;
 use Text::Wrap;
 
 $Text::Wrap::columns = 80;
 $Text::Wrap::huge    = 'overflow';
+
+our @EXPORT    = qw//;
+our @EXPORT_OK = qw/init_struct/;
+our @ISA       = qw/Exporter/;
 
 ##############################################################################
 ### Subroutines
@@ -62,6 +67,11 @@ $Text::Wrap::huge    = 'overflow';
 
 =item init_struct
 
+Initializes the structur
+
+Return
+
+Should be used 
 [...]
 
 =cut
@@ -80,7 +90,7 @@ sub init_struct {
 
     $REGISTER{$class}++;
 
-    return $new;
+    return (__PACKAGE__, $new);
 }  
 
 sub registered_form {
@@ -106,7 +116,7 @@ sub set {
     my ($self, %fields) = @_;
     my $form = $self->form;
     foreach my $field (keys %fields) { 
-        my $value = $self->data_to_human ($field, $fields{$field});
+        my $value = $self->human_to_data ($field, $fields{$field});
         if (my $key = $self->key_field ($field)) { 
             $self->$key ($value);
         }
@@ -121,7 +131,7 @@ sub human_to_data {
         my %hash = reverse $self->field_to_values ($field);
         return $hash{$value};
     } elsif ($self->field_is ('time', $field)) {
-        return str2time ($value);
+        return str2time ($value) || $value;
     } else {
         return $value;
     }
@@ -184,6 +194,10 @@ Returns I<limit_ref> verbatim.
 
 Adds the components of I<arrayref> into the array of limit components.
 
+=item all I <anything>
+
+=item ID I<number>
+
 =back
 
 Returns an array of limiting components
@@ -195,6 +209,8 @@ sub limit_basic {
     return $args{'limit'} if $args{'limit'};
     my $parent = $self->parent_or_die (%args);
 
+    if (my $incnum = $args{'ID'}) { return "'1' == \"$incnum\"" }
+
     my @limit;
     my %fields = $self->fields (%args);
     foreach my $field (keys %fields) {
@@ -203,6 +219,7 @@ sub limit_basic {
         push @limit, $limit if $limit;
     }
     if (my $extra = $args{'extra'}) { push @limit, @$extra }
+    push @limit, '1=1' if $args{'all'};
     
     @limit;
 }
@@ -215,34 +232,39 @@ sub limit_string {
     return "'$type' = \"$text\"" if defined $text;
 }
 
-=item insert (ARGHASH)
+=item save (ARGHASH)
 
-Attempts to insert the contents of this object into the database.  If
-successful, returns the newly-created item (selected with B<select_uniq ()>);
-on failure, sets an error in the parent object and returns an error.
+Attempts to save the contents of this object into the database.  
+
+If
+successful, reloads the newly-created item and returns it; on failure, sets an
+error in the parent object and returns an error.
 
 Note: this only inserts items, it doesn't update existing items.  You probably
 want to use B<save ()>!
 
 =cut
 
-sub insert {
+sub save {
     my ($self, %args) = @_;
 
     ## Make sure all data is reflected in the form
     my $form = $self->form or $self->error ('no form');
     
+    ## Go through the key fields, and move data if necessary
     my $keyhash = $self->key_field;
     foreach my $key (keys %{$keyhash}) {
         my $func = $$keyhash{$key};
         my $value = $self->$func;
         next unless defined $value;
         $self->set ($key, $self->$func);
-        # $form->set_value ($key, $self->$func);
     }
     
-    my $return = $form->save;
-    $self->reload ();
+    ## Write the data out
+    my $return = $form->save or return;
+
+    ## Reload the data
+    $self->reload () or return;
     return $return;
 }
 
@@ -264,8 +286,9 @@ sub init {
     my $parent = $class->parent_or_die (%args);
 
     # Create the object, and set the parent class
-    my $obj = $class->new;
-    $obj->parent    ($parent);
+    my $obj = {};
+    bless $obj, $class;
+    $obj->parent ($parent);
 
     my %map = $class->field_map ();
     foreach my $key (keys %map) { 
@@ -273,10 +296,6 @@ sub init {
     }
     
     return $obj;
-}
-
-sub new {
-
 }
 
 sub reload {
@@ -290,27 +309,6 @@ sub new_from_form {
     my $obj = $class->init (%args);
     $obj->form ($form);
     return $obj->_init_from_form ($form);
-}
-
-=item register (ARGHASH)
-
-Registers the object with the database - if the object already exists in the
-database, we will update it (with B<update ()>), and if it doesn't already
-exist, then we will insert it (with B<insert ()>).
-
-Returns a two-item array - a new object of the same class that is populated 
-from the database, and a a summary of the changes, suitable for parsing with 
-B<parse_register ()>.
-
-=cut
-
-sub save {
-    my ($self, %args) = @_;
-    if ($self->form && $self->form->get_request_id) { 
-        return $self->update (%args) 
-    } else { 
-        return $self->insert (%args) 
-    }
 }
 
 =item read (PARENT, ARGHASH)
@@ -348,7 +346,7 @@ If invoked in a scalar context, only returns the first item.
 
 =cut
 
-sub create {
+sub new {
     my ($class, %args) = @_;
     my ($parent, $session) = $class->parent_and_session (%args);
 
@@ -390,37 +388,13 @@ sub read {
             sprintf ("new_from_form (%s)", $self->table));
         push @return, $self->new_from_form ($entry, 'db' => $parent);
     }
+
     return wantarray ? @return : $return[0];
 }
 
-sub update {}
+sub insert { shift->save (@_) }
+sub update { shift->save (@_) }
 sub delete {}
-
-=item select_uniq (ARGHASH)
-
-As with B<select ()>, except we pass it a I<limit_ref> to select one (and only
-one) entry, based on the fields listed in B<field_uniq ()>. Returns the entry on
-success, an empty list if no entries match, or undef if more than one entry
-matches.
-
-=cut
-
-sub select_uniq {
-    my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
-
-    my %map = $self->field_map;
-    my %limit;
-    foreach my $func ($self->field_uniq) {
-        my $field = $map{$func};
-        $limit{$field} = $self->$func;
-    }
-
-    my @entries = $self->select ('limit' => \%limit, %args);
-    return () unless scalar @entries;
-    return if (scalar @entries > 1);
-    return $entries[0];
-}
 
 =item update (NEWOBJ, ARGHASH)
 
@@ -464,6 +438,19 @@ sub update {
 
 =over 4
 
+=item format_email (NAME, EMAIL)
+
+=cut
+
+sub format_email {
+    my ($self, $name, $email) = @_;
+    $name ||= "";
+    if ($email) { 
+        $email .= '@' . $self->parent->config->domain unless $email =~ /@/;
+    } else { $email = "" }
+    return $email ? "$name <$email>" : "$name";
+}   
+
 =item format_text_field (ARGHASHREF, FIELD, TEXT [, FIELD2, TEXT2 [...]))
 
 =cut
@@ -480,7 +467,8 @@ sub format_text_field {
     while (@print) { 
         my ($field, $text) = splice (@print, 0, 2);
         $field = "$field:";
-        push @entries, [$field, $text || "*unknown*"];
+        my $value = defined $text ? $text : "*unknown*";
+        push @entries, [$field, $value];
         $width = length ($field) if length ($field) > $width;
     }
     
@@ -506,9 +494,9 @@ sub format_text {
 }
 
 sub format_date {
-    my ($self, $date) = @_;  
-    return '(unknown time)' unless $date;
-    return strftime ('%Y-%m-%d %H:%M:%S', localtime ($date));
+    my ($self, $time) = @_;  
+    return '(unknown time)' unless $time;
+    return strftime ('%Y-%m-%d %H:%M:%S %Z', localtime ($time));
 }
 
 =back
@@ -769,6 +757,7 @@ sub debug_text {
 
 sub debug_table {
     my ($self) = @_;
+    return unless $self->form;
     return $self->form->as_string ('no_session' => 1);
 }
 

@@ -1,0 +1,33 @@
+* Tasks, such as 'TAS000000000123' (TAS000000000416).
+
+* remedy-close should invoke tkt_assign() if necessary.
+
+* "-m" option for cvs/svn/rcs-like commit text
+
+* standardize command-line flags
+
+* when remctl stdin/stdout works:
+    - stdin for text of changes
+    - worklog should log to newsgroup with more text
+    - 'client-contact' to start an actual email
+
+* 'all' functionality - get groups to search for out of a given user, and
+  proceed to do scans based on that information.
+        remedy-list -t unassigned --all-groups -u jonpilat
+
+* 'set pending' for the status field 
+
+
+* Simple 'reassign to ITS Help Desk Level 2' option, probably with aliases
+  for common groups; also wildcard searches for groups
+
+* remake 'pending ' - set Status to Pending, Status Reason to "Client Action
+  Required."
+
+* From vdc:
+
+  Can we say, if someone closes a ticket, the one closing the ticket must be
+  assigned to the ticket, or if there's no assignee, it automagically gets
+  assigned to them?
+
+* "Number of hours worked" on assign/close

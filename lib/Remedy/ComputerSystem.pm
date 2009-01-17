@@ -31,11 +31,9 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Stanford::Remedy;
-use Stanford::Remedy::Table;
+use Remedy::Table qw/init_struct/;
 
-our @ISA = (Stanford::Remedy::Table::init_struct ('Stanford::Remedy::ComputerSystem'),
-    'Stanford::Remedy::Table');
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
 ### Class::Struct

@@ -1,24 +1,27 @@
 package Remedy::SGA;
-our $VERSION = "0.12";  
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
+our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::SGA - Support Group Association
+Remedy::SGA - Support Group Association form
 
 =head1 SYNOPSIS
 
     use Remedy::SGA;
 
     # $remedy is a Remedy object
-    [...]
-    
+    foreach my $group (Remedy::SGA->read ('db' => $remedy, 'all' => 1)) {
+        print scalar $group->print_text;
+    }  
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::SGA maps users (the B<User> table) to support groups
-(B<Group>).
+Remedy::SGA manages the I<CTM:Support Group Association> form, which maps
+together users and support groups.  It is a sub-class of B<Remedy::Table>, so
+most of its functions are described there.
+
+[...]
 
 =cut
 
@@ -29,48 +32,113 @@ Stanfor::Remedy::SGA maps users (the B<User> table) to support groups
 use strict;
 use warnings;
 
-use Class::Struct;
-use Remedy;
-use Remedy::Table;
+use Remedy::Table qw/init_struct/;
+use Remedy::SupportGroup;
 
-our @ISA = qw/Remedy::SGA::Struct Stanford::Remedy::Table/;
-
-struct 'Remedy::SGA::Struct' => {
-    'parent'    => '$',
-};
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
-### Subroutines
+### Class::Struct
 ##############################################################################
 
 =head1 FUNCTIONS
 
-=item name ()
+=head2 B<Class::Struct> Accessors
+
+=over 4
+
+=item id (I<Support Group Association ID>)
+
+Internal ID of the entry.
+
+=item person (I<Full NameName>)
+
+Locally stored name of the associated person, ie 'Tim Skirvin'.
+
+=item group_id (I<Support Group ID>)
+
+Internal ID of the associated group.  
+
+=item person_id (I<Comments>)
+
+A longer, text description of the purpose of the group
+
+=item role (I<Support Group Assocation Role>)
+
+Not really sure, but it's populated and may be useful somehow.
+
+=back
 
 =cut
 
-sub name { 'CTM:Support Group Association' }
-
-=item schema ()
-
-=cut
-
-sub schema {
-    return ( 
-                 1 => "Entry ID",
-                 3 => "Create Time",
-                 4 => "Login Name",
-        1000000017 => "Full Name",
-        1000000079 => "Group",
-    );
+sub field_map { 
+    'id'           => 'Support Group Association ID',
+    'login'        => "Login ID",
+    'name'         => 'Full Name',
+    'group_id'     => 'Support Group ID',
+    'person_id'    => 'Person ID',
+    'role'         => 'Support Group Association Role',
 }
+
+##############################################################################
+### Local Functions 
+##############################################################################
+
+=head2 Associations 
+
+=over 4
+
+=item group
+
+=cut
+
+sub group {
+    my ($self, @rest) = @_;
+    return unless $self->group_id;
+    return Remedy::SupportGroup->read ('db' => $self->parent_or_die (@rest),
+        'ID' => $self->group_id, @rest);
+}
+
+=back
+
+sub person {}
+
+=head2 B<Remedy::Table Overrides>
+
+=over 4
+
+=item print_text ()
+
+=cut
+
+sub print_text {
+    my ($self, @rest) = @_;
+    my @return = "SGA information for '" . $self->name. "'";
+
+    my $group = $self->group or return 'no such group: ' . $self->group_id; 
+    push @return, $self->format_text_field (
+        {'minwidth' => 20, 'prefix' => '  '}, 
+        'ID'          => $self->id,
+        'Person'      => $self->format_email ($self->name, $self->login),
+        'Group'       => $group->name,
+        'Role'        => $self->role,
+    );
+
+    return wantarray ? @return : join ("\n", @return, '');
+}
+
+=item table ()
+
+=cut
+
+sub table { 'CTM:Support Group Association' }
 
 =back
 
 =cut
 
 ###############################################################################
-### Final Documentation #######################################################
+### Final Documentation
 ###############################################################################
 
 =head1 REQUIREMENTS
@@ -91,7 +159,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.

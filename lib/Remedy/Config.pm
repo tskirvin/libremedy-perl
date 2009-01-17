@@ -1,6 +1,5 @@
 package Remedy::Config;
 our $VERSION = '0.50';
-our $ID = q$Id: Config.pm 4666 2008-09-09 22:57:25Z tskirvin $;
 
 =head1 NAME
 
@@ -62,6 +61,7 @@ struct 'Remedy::Config' => {
     'config'      => '$',
     'count'       => '$',
     'debug'       => '$',
+    'domain'      => '$',
     'remedy_host' => '$',
     'remedy_port' => '$',
     'remedy_user' => '$',
@@ -107,6 +107,17 @@ Matches the B<company>, B<sub_org>, B<workgroup>, and B<username> accessors.
 =cut
 
 our ($COMPANY, $SUB_ORG, $WORKGROUP, $USERNAME);
+
+=item $DOMAIN
+
+If set, we will append this to usernames in order to make working email
+addresses.
+
+Matches the I<domain> accessor.
+
+=cut
+
+our ($DOMAIN);
 
 =item $LOGFILE, $LOGLEVEL
 
@@ -197,6 +208,7 @@ sub load {
 
     $self->count       ($SEARCH_COUNT);
     $self->company     ($COMPANY);
+    $self->domain      ($DOMAIN);
     $self->logfile     ($LOGFILE);
     $self->loglevel    ($LOGLEVEL);
     $self->remedy_host ($REMEDY_HOST);

@@ -1,0 +1,442 @@
+#!/usr/bin/perl
+# Copyright and license are in the documentation below.
+
+##############################################################################
+### Configuration
+##############################################################################
+
+## Modify and uncomment this to use user code instead of just system-wide
+## modules, or to use development versions.
+# use lib '/FULL/PATH/TO/PERL/MODULES';
+
+use lib "$ENV{HOME}/work/remedy/Stanford-Remedy/lib";   # not ideal
+use lib "$ENV{HOME}/work/libremedy-perl/lib";
+
+## Log level; higher is more.  '9' is considered fully verbose.
+our $LOGLEVEL = 1;
+
+## Tag to include include in the common log file
+our $LOG_TAG = "TKT_SHOW";
+
+## What's the default request type?
+our $DEFAULT_TYPE = "base";
+
+our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config.sandbox";
+# our $CONFIG = "$ENV{HOME}/work/libremedy-perl/etc/remedy/config";
+
+our $DEBUG;
+
+our $TIME = 0;      # time spent
+
+our $DEFAULT_USER = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
+our $DEFAULT_GROUP = '';
+
+our $STATUS = 'open';
+
+our $DAYS = 7;
+
+use vars qw/$USER $GROUP/;
+
+##############################################################################
+### Declarations
+##############################################################################
+
+use strict;
+use warnings;
+
+use Getopt::Long qw/GetOptions/;
+use Pod::Usage;
+use Remedy;
+use Remedy::Ticket;
+use Text::Wrap;
+
+$0 =~ s%.*/%%g;     # Lose the annoying path information
+
+##############################################################################
+### main ()
+##############################################################################
+
+$|++;       # Flush output
+
+my $parser = new Getopt::Long::Parser;
+my $result = $parser->getoptions (
+    'c|config=s'    => \$CONFIG,
+    'time=s'        => \$TIME,
+    'days=s'        => \$DAYS,
+    'user=s'        => \$USER,
+    'group=s'       => \$GROUP,
+    'status=s'      => \$STATUS,
+    'd|debug'       => sub { $DEBUG = 1; $LOGLEVEL = 9 },
+    'man'           => sub { pod2usage (-verbose=>2) },
+    'h|help'        => sub { pod2usage (-verbose=>1) }) || pod2usage (1);
+
+debug ("Loading config file $CONFIG") if $CONFIG;
+my $config = eval { Remedy::Config->load ($CONFIG) };
+error ($@) unless $config;
+error ($config) if $@;
+
+$config->debug    ($DEBUG);
+$config->loglevel ($LOGLEVEL);
+
+my ($query, @rest) = @ARGV;
+$query ||= '(none)';
+
+debug ("Connecting to database");
+my $remedy = eval { Remedy->connect ($config) }
+    or error ("couldn't connect to database: $@");
+error ($@) if $@;
+
+if (lc $query eq 'ticket') { 
+    my ($inc, $type, @args) = @rest;
+    my $tkt = get_ticket ($remedy, $inc) || error ("no ticket");
+
+    $type ||= '';
+    my @list = qw/primary requestor assignee description resolution worklog/;
+    if    (lc $type eq 'debug')      { @list = qw/debug/           } 
+    elsif (lc $type eq 'audit')      { @list = qw/primary audit/   }
+    elsif (lc $type eq 'worklog')    { @list = qw/primary worklog/ }
+    elsif (lc $type eq 'timelog')    { @list = qw/primary timelog/ }
+    elsif (lc $type eq 'summary')    { @list = qw/primary summary/ }
+    elsif ($type =~ /^(all|full)$/i) { push @list, qw/audit time/  }
+    else                             { push @list, qw/summary/     }
+
+    print scalar $tkt->print_text (@list);
+    exit 0;
+
+} elsif (lc $query eq 'list') { 
+    my ($type, @extra) = @rest;
+
+    my %hash = ('user' => $USER, 'group' => $GROUP, 'status' => $STATUS);
+    $type ||= 'open';
+    debug ("finding tickets of type '$type'");
+    if (lc $type eq 'unresolved') { 
+        my $time = time - $DAYS * 86400;
+        $hash{'before'} = $time;
+        $hash{'days'} = $DAYS;
+    } elsif (lc $type eq 'unassigned') { 
+        $hash{'unassigned'}++;
+    } elsif (lc $type eq 'assign') {
+        $hash{'user_assign'} = shift @extra || $USER || $DEFAULT_USER;
+    } elsif (lc $type eq 'submit') {
+        $hash{'user_submit'} = $USER || $DEFAULT_USER;
+    } else { pod2usage (-verbose => 1) }
+
+    foreach my $tkt ($remedy->list (%hash)) { 
+        print scalar $tkt->summary_text;
+    }
+    exit 0;
+
+} elsif (lc $query eq 'assign') { 
+    my ($inc, @args) = @rest;
+    my $tkt = get_ticket ($remedy, $inc) || error ("no ticket");
+
+    error ("Must set a user (may be blank), a group, or both") 
+        unless ($GROUP || defined $USER);
+    
+    my $return = $tkt->assign ('user' => $USER, 'group' => $GROUP);
+    if ($return) { 
+        print "success $return\n";
+        print scalar $tkt->print_text;
+        # print assignee information
+    } else { 
+        print "failure\n";
+    }
+
+
+} elsif (lc $query eq 'time_spent') { 
+    my ($inc, $minutes) = @rest;
+    my $tkt = get_ticket ($remedy, $inc) || error ("no ticket");
+
+    debug ("Adding timelog information to ticket " . $tkt->inc_num);
+
+    # $tkt->time_spent ($minutes)
+    my $timelog = $tkt->timelog_create ();
+    $timelog->time_spent ($minutes);
+    $timelog->submitter ($USER || $DEFAULT_USER);
+
+    # ...then add it to the main tkt entry as well
+
+    print scalar $timelog->print_text;
+    if (eval { my $ret = $timelog ->save }) {
+        print "Timelog entry " . $timelog->id . " saved\n";        
+        exit 0;
+    } else {
+        error ("Error saving timelog entry: $@");
+    }
+
+} elsif (lc $query eq 'worklog') { 
+    my ($inc, $text) = @rest;
+    my $incnum = $remedy->parse_incident_number ($inc)
+        or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
+    pod2usage (-verbose => 1) unless defined $incnum;
+
+    debug ("Adding worklog information to ticket $incnum");
+    my $tkt = $remedy->incident ($incnum)
+        or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
+
+    my $worklog = $tkt->worklog_create ();
+
+    # all of this data needs a bit of work, but it's reasonably accurate
+    $worklog->details ($text);
+    $worklog->submitter ($USER || $DEFAULT_USER);
+    $worklog->description ("submitted through script '$0'");
+    $worklog->type ('General Information');     # probably ought to come from something else
+
+    $worklog->time_spent ($TIME); 
+    # care about 'time' (3)?
+
+    print scalar $worklog->print_text;
+    if (eval { my $ret = $worklog->save }) {
+        print "Worklog entry " . $worklog->id . " saved\n";        
+        exit 0;
+    } else {
+        error ("error saving worklog entry: $@");
+    }
+
+} elsif (lc $query eq 'table') {   
+    my ($table) = @rest;
+
+    debug ("Getting all information about table '$table'");
+    my $obj = eval { $remedy->create ($table) };
+    if (defined $obj) { 
+        print scalar $obj->debug_table;
+        exit 0;
+    } else {
+        print "No information for '$table'; possible values:\n";
+        foreach (sort $remedy->registered_classes) { print " * $_\n" }
+        exit 1;
+    }
+
+} elsif (lc $query eq 'showall') {
+    my ($table) = @rest;
+
+    debug ("Printing all entries in table '$table'");
+    my @entries = eval { $remedy->read ($table, 'all' => 1) };
+    if ($@) { 
+        print "No information for '$table'; possible values:\n";
+        foreach (sort $remedy->registered_classes) { print " * $_\n" }
+        exit 1;
+    } elsif (scalar @entries) { 
+        foreach my $entry (@entries) { 
+            print scalar $entry->print_text;
+        }
+    } else {
+        print "No entries in table '$table'\n";
+    }
+    
+} elsif (lc $query eq 'computer') { 
+
+    foreach my $computer ($remedy->computer) { 
+        print scalar $computer->debug_text;
+    }
+
+} elsif (lc $query eq 'userinfo') { 
+    my ($user) = @rest;
+    $user ||= $USER || $DEFAULT_USER;
+
+    warn "searching for '$user'\n";
+    
+    foreach my $user ($remedy->user ($user)) { 
+        print scalar $user->print_text;
+    }
+
+} elsif (lc $query eq 'groupinfo') {
+
+# info - groupinfo, suppgrp, sga
+    
+
+
+} else { error ("Invalid query type: '$query'") }
+
+exit 0;
+
+##############################################################################
+### Subroutines 
+##############################################################################
+
+sub debug { warn "$0: @_\n" if $DEBUG }
+sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
+
+### _log_and_die (TEXT)
+# Logs TEXT with mainlib.pl's log () function, and dies with the text.
+
+sub _log_and_die {
+    my (@args) = @_;
+    my $text = join ("\n", @args, '');
+#    Stanford::Remedy::remedy_log ($LOG_TAG, $text);
+#    Stanford::Remedy::remedy_logoff ($AR) if $AR;
+    die $text;
+}
+
+sub get_ticket {
+    my ($remedy, $inc) = @_;
+    my $incnum = $remedy->parse_incident_number ($inc)
+        or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
+    debug ("Getting information about ticket $incnum");
+    my $tkt = $remedy->ticket ($incnum)
+        or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
+    return $tkt;
+}
+
+
+### _loglevel (LEVEL, TEXT)
+# Logs TEXT with mainlib.pl's log () function if the level passed is
+# less-or-equal to the current $LOGLEVEL.
+
+sub _loglevel {
+    my ($level, @args) = @_;
+    Stanford::Remedy::remedy_log_iflevel ($level, $LOG_TAG, @args);
+}
+
+### _parse_params (TICKET, TYPE)
+# Pulls the ticket and printing parameters from the command-line.
+
+sub _parse_params {
+    shift @_ if $ENV{'REMOTE_USER'};    # support for remctl use
+    my ($incnum, $type) = @_;
+    $type ||= "base";
+    pod2usage (-verbose => 1) unless ($incnum && $type);
+
+    $type = lc $type;
+    _loglevel (5, "Type set to $type");
+    pod2usage (-verbose => 1) if $incnum =~ /^(base|full|all|help)$/i;
+
+    # Standardize the ticket name
+    unless (($incnum =~ /^(INC|TAS)/) && (length ($incnum) == 15)) {
+        my $prefix = $1;
+        if ($incnum =~ /^HD\d+/) {
+            $incnum =~ s/^HD0//;
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        } elsif ($incnum =~ /^$prefix\d+/) {
+            $incnum =~ s/^$prefix//;
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        } elsif ($incnum =~ /^\d+$/) {
+            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
+        }
+    }
+    _loglevel (5, "req set to $incnum");
+
+    _loglevel (5, "ticket requested is $incnum");
+
+    ($incnum, $type);
+}
+
+##############################################################################
+### Documentation
+##############################################################################
+
+=head1 NAME
+
+remedy-ticket - prints useful information about a Remedy ticket
+
+=head1 SYNOPSIS
+
+  remedy-ticket [-hv] C<INCIDENT_NUMBER> [<base|full|worklog|audit>]
+
+=head1 DESCRIPTION
+
+remedy-ticket queries the Remedy database for information on a given ticket 
+(as refrenced with C<INCIDENT_NUMBER> and creates a human-parsable report 
+containing all relevant information, including worklog information.  It is 
+designed to be used through a remctl interface for the Unix Systems team.
+
+Note that extensive logging is stored in B</tmp/remedy_log.txt>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-h>, B<--help>
+
+Prints out the synopsis information and exits.
+
+=item B<-v>, B<--version>
+
+Prints out the version information and exits.
+
+=back
+
+=head1 EXAMPLES
+
+There are three basic modes of operation:
+
+=over 4
+
+=item remedy-ticket INC000000804714
+
+=item remedy-ticket INC000000804714 base
+
+Prints basic information about the ticket, the requestor, who it has been
+assigned to, resolution information, and a summary of the associated work
+log entries.  Returns results that look something like this (but longer):
+
+  Basic Info
+    Ticket:               INC000000804714
+    Summary:              Data Backup and Recovery
+    Submitted:            Mon Feb 25 09:32:05 2008
+    Status:               Closed
+    [...]
+
+This is the default mode.
+
+=item remedy-ticket INC000000804714 full
+
+Offers a basic "debugging" mode for the ticket itself, so that all fields 
+in the ticket can be viewed.  Returns results like this:
+
+  Full information for INC000000804714
+
+             1 Entry ID                         INC000000804609
+             2 Submitter                        RemedyAPIUser
+             3 Submit Date                      1203960725
+             4 Assignee Login ID                jared14
+             5 Last Modified By                 AR_ESCALATOR
+             6 Last Modified Date               1209327132
+    [...]
+
+=item remedy-ticket INC000000804714 worklog
+
+Offers the same kind of "debugging" mode, but for the worklog information 
+regarding the ticket.  Returns results like this:
+
+Worklog Entries for INC000000804714
+
+  Entry 1
+             1 Work Log ID                      WLG000000809377
+             2 Submitter                        spyksma
+             3 Submit Date                      1204150081
+             4 Assigned To                      (none)
+      [...]
+   
+
+  Entry 2
+             1 Work Log ID                      WLG000000810435
+             2 Submitter                        cbyee
+             3 Submit Date                      1204229267
+             4 Assigned To                      (none)
+      [...]
+
+=item remedy-ticket INC000000804714 audit
+
+Prints all of the audit log information about the ticket.  
+
+=back
+
+=cut
+
+=head1 REQUIREMENTS
+
+B<Stanford::Remedy>
+
+=cut
+
+=head1 AUTHOR
+
+Based on original unattributed source script 'show_inc_tkt'.  Rewritten and new
+features added by Tim Skirvin <tskirvin@stanford.edu>
+
+=head1 LICENSE
+
+For Stanford internal use only.
+
+=cut

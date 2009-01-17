@@ -1,6 +1,5 @@
 package Remedy;
 our $VERSION = "0.13";
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -21,15 +20,6 @@ read and modify tickets.
 =cut
 
 ##############################################################################
-### Configuration ############################################################
-##############################################################################
-
-# variables that must die
-use vars qw/$TAG %remedy_HelpDesk %AR_SCHEMA %remedy_SGA %FILE_LOC/;
-
-use vars qw/%TABLES/;
-
-##############################################################################
 ### Declarations #############################################################
 ##############################################################################
 
@@ -43,9 +33,10 @@ use Stanford::Remedy::Form;
 use Stanford::Remedy::Session;
 
 use Remedy::Config;
+use Remedy::Table;
 use Remedy::Incident;
+use Remedy::Task;
 use Remedy::User;
-use Remedy::Form;
 
 struct 'Remedy' => {
     'config'   => 'Remedy::Config',
@@ -60,15 +51,31 @@ struct 'Remedy' => {
 
 =head1 FUNCTIONS
 
+=head2 Class::Struct Methods
+
+=over 4
+
+=item new ()
+
+=item config (B<Remedy::Config>)
+
+=item loglevel ($)
+
+=item formdata (%)
+
+=item session (B<Stanford::Remedy::Session>)
+
+=back
+
 =head2 Construction
 
 =over 4
 
 =item connect (CONFIG)
 
-=over 4
+Connects to the Remedy server, and creates a B<Stanford::Remedy::Connection> object.
 
-=item 
+I<CONF> is a B<Remedy::Config> object, which contains details of how we will connect.
 
 =cut
 
@@ -110,10 +117,41 @@ sub connect {
     return $self;
 }
 
-sub list {
-    my ($self, %args) = @_;
-    Remedy::Incident->read ('db' => $self, %args);
+=item init_form (CLASS [, EXTRA])
+
+=cut
+
+sub init_form {
+    my ($self, $class, @rest) = @_;
+    return unless $class;
+
+    local $@;
+    my $return = eval { 
+        require $class; 
+        import $class @rest; 
+        $class->import ($self) 
+    };
+    $self->error ("could not load class '$class': $@") unless $return;
+    return $return;
 }
+
+=back
+
+=head2 CRUD
+
+=over 4
+
+=item create ()
+
+=item read ()
+
+=item update ()
+
+=item delete ()
+
+=back
+
+=cut
 
 =item parse_incident_number (NUMBER)
 
@@ -146,12 +184,6 @@ sub parse_incident_number {
 
 =over 4
 
-=item group_from_incnum (AR, INC_NUM)
-
-=cut
-
-sub group_from_incnum { _info_from_incnum(shift, 'Assigned Group', @_); }
-
 =item remedy_log (TAG, NOTE)
 
 Writes out a log message to the log file specified in $FILE_LOC{RemedyLog}
@@ -167,14 +199,14 @@ STDERR).
 sub remedy_log {
     my ($self, $tag, $note) = @_;
     $note ||= "no note";
-    my $time = strftime ("%Y-%m-%d %H:%M:%S", localtime (time));
+    my $time = strftime ("%Y-%m-%d %H:%M:%S %Z", localtime (time));
     my $file = $self->config->logfile;
-    unless ($file) { warn "No logfile set!\n" && return }
-    open (LOG, ">>$file") or (warn "Couldn't write to $file: '$!'"
-                                                    and return);
+    return $self->warn_debug (2, 'no logfile set') unless defined $file;
+    open (LOG, ">>", $file) 
+        or return $self->warn_debug (1, "can't write to $file: $!");
     print LOG "$time: [$tag] $note\n";
     close LOG;
-    1;
+    return 1;
 }
 
 =item remedy_log_iflevel (LEVEL, TAG, TEXT)
@@ -202,236 +234,6 @@ sub remedy_logoff {
     $self->ars->ars_Logoff();
 }
 
-=item search_sga (AR, [USER], [GID])
-
-Searches the "Support Group Association" table, which matches users and
-workgroups.  At least one of I<USER> (user login) or I<GID> (Group ID)
-must be passed; searches the SGA table for as much information as it gets.  In
-a scalar context, returns the first matched entry as a hashref with Key/Value
-pairs being the information field numbers and the associated text; in a list
-context, returns a hash of such entries, where the keys are the "Entry ID".
-
-=cut
-
-sub search_sga {
-    my ($self, $user, $gid) = @_;
-    return unless ($user || $gid);
-    Remedy::SGA->search ('db' => $self, 'Login Name' => $user,
-        'Group' => $gid);
-}
-
-=item search_supportgroup (AR, GroupName)
-
-Searches the "Support Group" table for C<GroupName>.  In a scalar context,
-returns the first matched entry as a hashref with Key/Value pairs being the
-information field numbers and the associated text; in a list context, returns a
-hash of such entries, where the keys are the "Entry ID".
-
-=cut
-
-sub search_supportgroup {
-    my ($self, $group) = @_;
-    Remedy::SupportGroup->search ('db' => $self, 'Group' => $group);
-}
-
-=item show_sga_full (AR, USER)
-
-Shows debug-level information on all support group association associated with
-C<USER>.
-
-=cut
-
-sub show_sga_full {
-    my ($ar, $user) = @_;
-    my @return = "All support group association information for '$user'";
-    my %entries = search_sga($ar, $user);
-    push @return, _show_hashinfo_debug ($ar, \%remedy_SGA, %entries);
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item show_supportgroupinfo_full (AR, GROUP)
-
-Shows all support group information for the group C<GROUP>.
-
-=cut
-
-sub show_supportgroupinfo_full {
-    my ($ar, $group) = @_;
-    my @return = "All support group information for '$group'";
-    my %entries = search_supportgroup($ar, $group);
-    #push @return, _show_hashinfo_debug($ar, \%remedy_SupportGroup, %entries);
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item show_userinfo_full (AR, SUNetID)
-
-=cut
-
-sub show_userinfo_full {
-    my ($self, $sunet) = @_;
-    my @return = "All user information for '$sunet'";
-    my %entries = $self->search_sga ($sunet);
-    #push @return, _show_hashinfo_debug ($ar, \%remedy_SGA, %entries);
-    #wantarray ? @return : join("\n", @return, '');
-}
-
-=item summary_search (AR, SEARCH [, SEARCH [, SEARCH ]] )
-
-TBD.
-
-=cut
-
-sub summary_search {
-    my ($self, @search) = @_;
-    my $search = join(" and ", @search);
-    my %entries = _helpdesk_search ($self, $search, $self->conf->count);
-    my @return;
-    foreach my $key (sort keys %entries) {
-        my $entry = $entries{$key};
-        push @return, scalar $self->summary_tkt ($entry);
-    }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item text_tktlist_assignee (AR, USERNAME, TYPE)
-
-Returns a list of entries, formatted with B<summary_ticket()>, that were
-assigned to the given C<USERNAME> and restricted by C<TYPE>.  Possible values
-for C<TYPE>:
-
-  open      Open tickets
-  closed    Closed/Resolved tickets
-  all       All tickets                 DEFAULT
-
-=cut
-
-sub text_tktlist_assignee {
-    my ($ar, $user, $subtype) = @_;
-    my $text;
-    my @search = "'4' = \"$user\"";    # Search by Assignee SUNet ID
-
-    if (lc $subtype eq 'open') {
-        $text = "Open tickets assigned to user '$user'";
-        push @search, "'7' < 4";  # Open tickets
-    } elsif (lc $subtype eq 'closed') {
-        $text = "Closed tickets assigned to user '$user'";
-        push @search, "'7' >= 4"; # Closed tickets
-    } else { $text = "All tickets assigned to user '$user'"; }
-
-    _text_tkt_summary($ar, $text, @search);
-}
-
-=item text_tktlist_group (AR, GROUP, TYPE)
-
-Returns a list of entries, formatted with B<summary_ticket()>, that were
-assigned to the given C<GROUP> and restricted by C<TYPE>.  Possible values for
-C<TYPE>:
-
-  open      Open tickets
-  closed    Closed/Resolved tickets
-  all       All tickets                 DEFAULT
-
-=cut
-
-sub text_tktlist_group {
-    my ($ar, $group, $subtype) = @_;
-    my $text;
-    my @search = "'1000000217' = \"$group\""; # Search by Assignee Group
-
-    if (lc $subtype eq 'open') {
-        $text = "Open tickets assigned to group '$group'";
-        push @search, "'7' < 4";  # Open tickets
-    } elsif (lc $subtype eq 'closed') {
-        $text = "Closed tickets assigned to group '$group'";
-        push @search, "'7' >= 4"; # Closed tickets
-    } else { $text = "All tickets assigned to group '$group'"; }
-
-    _text_tkt_summary($ar, $text, @search);
-}
-
-=item text_tktlist_submit (AR, USER, TYPE)
-
-Returns a list of entries, formatted with B<summary_ticket()>, that were
-submitted by the given C<USER> and restricted by C<TYPE>.  Possible values for
-C<TYPE>:
-
-  open      Open tickets
-  closed    Closed/Resolved tickets
-  all       All tickets                 DEFAULT
-
-=cut
-
-sub text_tktlist_submit {
-    my ($ar, $user, $subtype) = @_;
-    my $text;
-    my @search = "'536871225' = \"$user\"";    # Search by Submitter SUNet ID
-
-    if (lc $subtype eq 'open') {
-        $text = "Open tickets submitted by user '$user'";
-        push @search, "'7' < 4";  # Open tickets
-    } elsif (lc $subtype eq 'closed') {
-        $text = "Closed tickets submitted by user '$user'";
-        push @search, "'7' >= 4"; # Closed tickets
-    } else { $text = "All tickets submitted by user '$user'"; }
-
-    _text_tkt_summary($ar, $text, @search);
-}
-
-=item text_tktlist_unassigned (AR, GROUP)
-
-Finds unresolved tickets that are assigned to a C<GROUP> but are not yet
-assigned to a specific person.
-
-=cut
-
-sub text_tktlist_unassigned {
-    my ($ar, $group) = @_;
-    my @search;
-
-    push @search, "'7' < \"Resolved\"";         # Ticket is not resolved
-    push @search, "'4' == NULL";                # Ticket is not assigned to a person
-    push @search, "'1000000217' = \"$group\"";  # Ticket is from group GROUP
-
-    my $string = "Unassigned tickets for '$group'";
-    _text_tkt_summary($ar, $string, @search);
-}
-
-=item text_tktlist_unresolved (AR, GROUP, TIMESTAMP)
-
-Finds unresolved tickets assigned to the group C<GROUP> that were submitted
-before C<TIMESTAMP> (seconds-since-epoch), and skipping projects and orders.
-
-=cut
-
-sub text_tktlist_unresolved {
-    my ($ar, $group, $time) = @_;
-
-    my $formdate = _date_remedy ($time);
-
-    my @search;
-    push @search, "'7' < \"Resolved\"";         # Ticket is not resolved
-    push @search, "'3' < \"$formdate\"";        # Ticket is from before DATE
-    push @search, "'1000000217' = \"$group\"";  # Ticket is from group GROUP
-    push @search, qq/('700000048' = \$--1\$ OR '700000048' != "Project" AND '700000048' != "Order")/;
-
-    my $string = join(" ", "Unresolved tickets for '$group',",
-                                "submitted before", _timedate($time));
-    _text_tkt_summary($ar, $string, @search);
-}
-
-
-=cut
-
-('Assigned Group*+' = "ITS Unix Systems" OR 'Assigned Group*+' = "ITS AFS" OR
-'Assigned Group*+' = "ITS Directory Tech" OR 'Assigned Group*+' = "ITS Email
-Servers" OR 'Assigned Group*+' = "ITS Kerberos" OR 'Assigned Group*+' = "ITS
-Pubsw" OR 'Assigned Group*+' = "ITS Usenet" OR 'Assigned Group*+' = "ITS Web
-Infrastructure") AND ('Status*' = "Assigned" OR 'Status*' = "In Progress" OR
-'Status*' = "Pending" OR 'Status*' = "New") AND ('Last Modified Date' <= $DATE$
-- (5*60*24*60)) AND ('Incident Type*' = "Request")
-
-=cut
-
 =item incident (AR, INCNUM)
 
 Pulls full data about a ticket from C<INCNUM>, the incident number that is the
@@ -439,6 +241,11 @@ general key to the tickets.  Returns C<TKTHASH> information, a hashref that is
 used by other functions.
 
 =cut
+
+sub list {
+    my ($self, %args) = @_;
+    Remedy::Incident->read ('db' => $self, %args);
+}
 
 sub incident {
     my ($self, $incnum) = @_;
@@ -451,38 +258,47 @@ sub incident {
 
 sub incident_create { shift->create ('Remedy::Incident', @_) }
 
+=item computer (HOSTNAME)
+
+=cut
+
 sub computer {
     my ($self, $cmdb) = @_;
     Remedy::ComputerSystem->read ('db' => $self, 'Name' => $cmdb);
 }
 
+=item user (USERNAME)
+
+=cut
+
 sub user {
     my ($self, $netid) = @_;
-    Remedy::User->read ('db' => $self, 'Login Name' => $netid);
+    # Remedy::User->read ('db' => $self, 'all' => 1, 'Login Name' => $netid);
+    Remedy::User->read ('db' => $self, 'all' => 1,);
 }
 
 sub create {
     my ($self, $form) = @_;
-    my $registered = Remedy::Form->registered_form ($form);
-    $self->error ("No such form: '$form'") unless defined $registered;
-    $registered->create ('db' => $self);
+    my $registered = Remedy::Table->registered_form ($form);
+    $self->error ("no such form: '$form'") unless defined $registered;
+    return $registered->new ('db' => $self);
+}
+sub read   { 
+    my ($self, $form, @args) = @_;
+    my $registered = Remedy::Table->registered_form ($form);
+    $self->error ("no such form: '$form'") unless defined $registered;
+    return $registered->read ('db' => $self, @args);
+}
+sub update { 
+    my ($self, $form, $entry) = @_;
+    ### 
+    return
+}
+sub delete { 
+    my ($self, $form, @args) = @_;
 }
 
-sub registered_classes { Remedy::Form->registered }
-
-sub init_form {
-    my ($self, $class, @rest) = @_;
-    return unless $class;
-
-    local $@;
-    my $return = eval { 
-        require $class; 
-        import $class @rest; 
-        $class->import ($self) 
-    };
-    $self->error ("could not load class '$class': $@") unless $return;
-    return $return;
-}
+sub registered_classes { Remedy::Table->registered }
 
 =item tkt_assign (AR, TICKET, INFOHASH)
 
@@ -517,8 +333,8 @@ sub tkt_assign {
     # Assign the group if it's passed to us; check to see if it's valid first
     if ($hash{'group'}) {
         $tktdata{'1000000079'} = $gid;          # 'Assigned Group ID'
-        #$tktdata{'1000000251'} = $COMPANY;      # 'Support Company'
-        #$tktdata{'1000000014'} = $SUBORG;       # 'Support Organization'
+        #$tktdata{'1000000251'} = $COMPANY;     # 'Support Company'
+        #$tktdata{'1000000014'} = $SUBORG;      # 'Support Organization'
         $tktdata{'1000000217'} = $group;        # 'Assigned Group'
     }
 
@@ -552,6 +368,8 @@ function does not actually try to do so on its own.
 
 Also note that you can close a ticket again, and it just overrides the old
 text.  This may not be ideal; we'll revisit.
+
+=cut
 
 =cut
 
@@ -596,96 +414,15 @@ sub tkt_setstatus {
 #    } else { return 0 }
 }
 
-=item text_groupinfo (AR, GROUPNAME)
-
-Prints basic information about C<GROUPNAME>.  This consists of the name of the
-group, the date that it was created, and the current members of the group (as
-parsed out of the SupportGroup table).  Depending on method of invocation,
-returns either a multi-line string or an array of lines that make up the
-strong.
-
 =cut
 
-sub text_groupinfo {
-    my ($ar, $group) = @_;
-    remedy_log_iflevel(3, $TAG, "Entering text_groupinfo()");
+##############################################################################
+### Errors and Debugging #####################################################
+##############################################################################
 
-    my @return = "Group information for '$group'";
-    my $entry = search_supportgroup($ar, $group);
-    if ($entry) {
-        push @return, _format_text("Name", $group);
-        push @return, _format_text("Group ID", _suppgrp($entry, "Entry ID"));
-        push @return, _format_text("Created", _form_date(
-                                    _suppgrp($entry, "Create Time")));
-        push @return, _format_text("Members", "");
-        my $gid = _suppgrp($entry, "Entry ID");
-        my %groups = search_sga($ar, undef, $gid);
-        foreach my $grp (sort keys %groups) {
-            my $info = $groups{$grp};
-            next unless ($info && ref $info);
-            my $name =  _sgainfo($info, "Full Name") || "*unknown*";
-            my $sunet = _sgainfo($info, "Login Name") || "*unknown*";
-            push @return, "    $name <$sunet\@stanford.edu>";
-        }
-        push @return, "    No Matches" unless scalar %groups;
+=head2 Errors and Debugging
 
-    } else { push @return, "  No Entries" }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=item text_userinfo (AR, SUNETID)
-
-Lists all information about the given user, including what groups the user is a
-member of.  Depends on the 'User' table.
-
-=cut
-
-sub text_userinfo {
-    my ($self, $ar, $sunet) = @_;
-    $self->remedy_log_iflevel(3, $TAG, "Entering text_userinfo()");
-
-    my @return = "User information for '$sunet'";
-
-    my $entry = search_sga($ar, $sunet);
-    if ($entry) {
-        push @return, _format_text("Full Name",
-                _sgainfo($entry, "Full Name") || "(unknown)");
-        push @return, _format_text("SUNetID",
-                _sgainfo($entry, "Login Name") || "(unknown)");
-        my @groups = user_groups($ar, $sunet);
-        if (scalar @groups) {
-            push @return, _format_text("Subscribed Groups", "");
-            foreach my $name (sort @groups) {
-                push @return, "    $name";
-            }
-        } else {
-            push @return, _format_text("Subscribed Groups", "None Found")
-        }
-    } else { push @return, "  No matches" }
-    wantarray ? @return : join("\n", @return, '');
-}
-
-=cut
-
-sub user_groups {
-    my ($ar, $sunet) = @_;
-
-    my @return;
-    my %groups = search_sga($ar, $sunet);
-    if (scalar %groups) {
-        foreach my $group (sort keys %groups) {
-            my $key = $groups{$group}->{'1000000079'};
-            my $grp = _schema_search($ar, $AR_SCHEMA{'SuppGrp'},
-                                            "'1' = \"$key\"");
-            next unless ($grp && ref $grp);
-            my $name = _suppgrp($grp, "Group") || "*unknown*";
-            push @return, $name;
-        }
-    }
-    @return;
-}
-
-=cut
+=over 4
 
 =item warn_level (LEVEL, TEXT)
 
@@ -705,6 +442,10 @@ sub warn_level {
     return;
 }
 
+=item error (LEVEL, TEXT)
+
+=cut
+
 sub error { die shift->warn_level (0, @_), "\n" }
 
 ###############################################################################
@@ -717,9 +458,16 @@ sub DESTROY { if (my $session = shift->session) { $session->disconnect } }
 ### Final Documentation #######################################################
 ###############################################################################
 
+=head1 TODO
+
+Merge B<Stanford::Remedy::Session>, B<Stanford::Remedy::Form>, and
+B<Stanford::Remedy::FormData> into this module set.
+
+B<Remedy::Incident> should be split into Ticket/Incident and Ticket/Task
+
 =head1 REQUIREMENTS
 
-B<ARS>
+B<Stanford::Remedy>
 
 =head1 SEE ALSO
 
@@ -742,13 +490,10 @@ TBD.
 
 =head1 LICENSE
 
-Licensed for internal Stanford use only.  This will hopefully be revisited
-later.
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
-=head1 COPYRIGHT
-
-Copyright 2008-2009, Tim Skirvin and Board of Trustees, Leland Stanford
-Jr. University
+This program is free software; you may redistribute it and/or modify
+it under the same terms as Perl itself.
 
 =cut
 

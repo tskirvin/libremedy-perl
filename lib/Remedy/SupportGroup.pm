@@ -1,74 +1,118 @@
 package Remedy::SupportGroup;
-our $VERSION = "0.12";
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
+our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::SupportGroup - Support Group Association
+Remedy::SupportGroup - Department form
 
 =head1 SYNOPSIS
 
     use Remedy::SupportGroup;
 
     # $remedy is a Remedy object
-    [...]
+    foreach my $group (Remedy::SupportGroup->read ('db' => $remedy, 'all' => 1)) {
+        print scalar $group->print_text;
+    }  
 
 =head1 DESCRIPTION
 
-Remedy::SupportGroup [...]
+Remedy::SupportGroup manages the I<SupportGroup> form, which manages access privileges
+for groups of users.  It is a sub-class of B<Remedy::Table>, so most of its
+functions are described there.
+
+Note that if you're looking for the support group mappings, you should see
+B<Remedy::SupportSupportGroup>.
 
 =cut
 
 ##############################################################################
-### Declarations #############################################################
+### Declarations
 ##############################################################################
 
 use strict;
 use warnings;
 
-use Class::Struct;
-use Remedy;
-use Remedy::Table;
+use Remedy::Table qw/init_struct/;
+use Remedy::SGA;
 
-our @ISA = qw/Remedy::SupportGroup::Struct Stanford::Remedy::Table/;
-
-struct 'Remedy::SupportGroup::Struct' => {
-    'parent'    => '$',
-};
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
-### Subroutines ##############################################################
+### Class::Struct
 ##############################################################################
 
 =head1 FUNCTIONS
 
+=head2 B<Class::Struct> Accessors
+
 =over 4
 
-=item name ()
+=item id (I<Request ID>)
+
+Internal ID of the entry.
+
+=item name (I<SupportGroup Name>)
+
+Name of the group, ie 'Sub Administrator'
+
+=item summary (I<Long SupportGroup Name>)
+
+A short description of the group 
+
+=item description (I<Comments>)
+
+A longer, text description of the purpose of the group
+
+=back
 
 =cut
 
-sub name { 'CTM:Support Group' }
-
-=item schema ()
-
-=cut
-
-sub schema {
-    return (
-                 1 => "Entry ID",
-                 3 => "Create Time",
-        1000000015 => "Group",
-    );
+sub field_map { 
+    'id'          => 'Support Group ID',
+    'name'        => 'Support Group Name',
+    #'summary'     => 'Long SupportGroup Name',
+    #'description' => 'Comments'
 }
+
+##############################################################################
+### Local Functions 
+##############################################################################
+
+=head2 B<Remedy::Table Overrides>
+
+=over 4
+
+=item print_text ()
+
+=cut
+
+sub print_text {
+    my ($self) = @_;
+    my @return = "SupportGroup information for '" . $self->name. "'";
+
+    push @return, $self->format_text_field (
+        {'minwidth' => 20, 'prefix' => '  '}, 
+        'Name'        => $self->name,
+        #'Summary'     => $self->summary,
+        #'Description' => $self->description,
+    );
+
+    return wantarray ? @return : join ("\n", @return, '');
+}
+
+=item table ()
+
+=cut
+
+sub table { 'CTM:Support Group' }
 
 =back
 
 =cut
 
 ###############################################################################
-### Final Documentation #######################################################
+### Final Documentation
 ###############################################################################
 
 =head1 REQUIREMENTS
@@ -89,7 +133,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.

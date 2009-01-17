@@ -1,24 +1,24 @@
-package Remedy::WorkLog;
+package Remedy::Time;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Worklog - per-ticket worklogs
+Remedy::Time - per-ticket time logs
 
 =head1 SYNOPSIS
 
-    use Remedy::Worklog;
+    use Remedy::Time;
 
     # $remedy is a Remedy object
-    my @worklog = Remedy::WorkLog->read ('db' => $remedy, 
+    my @worklog = Remedy::Time->read ('db' => $remedy, 
         'EID' => 'INC000000002371');
     for my $entry (@worklog) { print scalar $entry->print_text }
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Unix::WorkLog tracks individual work log entries for tickets as part
+Stanfor::Remedy::Unix::Time tracks individual work log entries for tickets as part
 of the remedy database.  It is a sub-class of B<Stanford::Packages::Form>, so
 most of its functions are described there.
 
@@ -31,9 +31,9 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
+use Remedy::Table;
 
-our @ISA = init_struct (__PACKAGE__);
+our @ISA = (Remedy::Table::init_struct (__PACKAGE__), 'Remedy::Form');
 
 ##############################################################################
 ### Class::Struct
@@ -85,31 +85,6 @@ Address of the person who created this worklog entry.  Corresponds to field
 ### Local Functions 
 ##############################################################################
 
-=head2 Local Functions
-
-=over 4
-
-=item attachments 
-
-Lists the names of the attachments connected with this worklog, separated with
-semicolons, or 'none' if there are none.
-
-=cut
-
-sub attachments {
-    my ($self) = @_;
-    my @list;
-    for my $i (qw(1 2 3 4 5)) {
-        my $func = "attach$i";
-        my $attach = $self->$func;
-        if ($attach && ref $attach) { 
-            push @list, $$attach{'name'};
-        }
-            
-    }
-    return scalar @list ? join ("; ", @list) : "none";
-}
-
 =head2 B<Remedy::Table Overrides>
 
 =over 4
@@ -119,19 +94,11 @@ sub attachments {
 =cut
 
 sub field_map { 
-    'id'                    => 'Work Log ID',
-    'description'           => 'Description',
-    'details'               => 'Detailed Description',
-    'date_submit'           => 'Work Log Submit Date',
-    'submitter'             => 'Work Log Submitter',
-    'inc_num'               => 'Incident Number',
-    'type'                  => 'Work Log Type',
-    'time_spent'            => 'Total Time Spent',
-    'attach1'               => 'z2AF Work Log01',
-    'attach2'               => 'z2AF Work Log02',
-    'attach3'               => 'z2AF Work Log03',
-    'attach4'               => 'z2AF Work Log04',
-    'attach5'               => 'z2AF Work Log05',
+    'id'          => 'Request ID',
+    'submit_time' => 'Create Date',
+    'inc_num'     => 'Incident Number',
+    'time_spent'  => 'Time Spent',
+    'submitter'   => 'User Entering Time Spent',
 }
 
 =item limit (ARGHASH)
@@ -175,26 +142,21 @@ sub print_text {
 
     my @return = $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Submitter'        => $self->submitter,
-        'Date'             => $self->date_submit,
-        'Description'      => $self->description,
-        'Type'             => $self->type,
         'Time Spent (min)' => $self->time_spent || '(not set)',
-        'Attachments'      => $self->attachments || 0);
-
-    push @return, '', $self->format_text ({'prefix' => '  '},
-        $self->details || "No text provided");
+        'Submitted By'     => $self->submitter,
+        'Submitted Time'   => $self->submit_time,
+    );
 
     return wantarray ? @return : join ("\n", @return, '');
 }
 
 =item table ()
 
-'HPD:WorkLog'
+'HPD:Time'
 
 =cut
 
-sub table { 'HPD:WorkLog' }
+sub table { '+HPD:INC-SupportIndividualTimeLog' }
 
 =back
 

@@ -12,15 +12,13 @@ $REMEDY_PASS = 'c3p0r2d2';
 ## Default criteria for queries and updates
 $COMPANY   = "Stanford University";
 $SUB_ORG   = "IT Services";
-$WORKGROUP = "ITS Unix Systems";
+$WORKGROUP = "";
 $USERNAME  = "";
+$DOMAIN    = "stanford.edu";
 
 ## Where will we log our usage?
 $LOGFILE  = "/tmp/remedy_log-debug.txt";
 $LOGLEVEL = 9;
-
-## Maximum number of entries to return on a search.
-$SEARCH_COUNT = 100;
 
 ## When we're printing text, wrap at this many characters
 $TEXT_WRAP = 79;
