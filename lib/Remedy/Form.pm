@@ -1,30 +1,29 @@
-package Remedy::Table;
+package Remedy::Form;
 our $VERSION = "0.50";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Table - shared functions for all database tables
+Remedy::Form - access functions shared functions for all remedy forms
 
 =head1 SYNOPSIS
 
-    use Remedy::Table;
+    use Remedy::Form;
 
 This is meant to be used as a template for other modules; please see the 
 man pages listed under SEE ALSO for more usage information.
 
 =head1 DESCRIPTION
 
-Remedy::Table implements a consistent set of shared functions used by the
-'table' modules under B<Remedy> - System, Package, SystemPackage, and History.
-These functions include interfaces to B<Remedy::Database>, functions that store
-table-specific information such as field names and default sorting, and basic
-debugging tools.
+Remedy::Form implements a consistent set of shared functions used by the
+sub-form modules (eg B<Remedy::Form::People>, B<Remedy::Form::SupportGroup>,
+B<Remedy::Form::Generic>), so that they can tie into the central B<Remedy>
+system.
 
 =cut
 
 ##############################################################################
-### Configuration 
+### Configuration ############################################################
 ##############################################################################
 
 ## Debugging information level, for passing upstream
@@ -33,10 +32,8 @@ our $DEBUG = 7;
 ## Number of characters designated for the field name in the debug functions
 our $DEBUG_CHARS = 30;
 
-our %REGISTER;
-
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -44,19 +41,19 @@ use strict;
 use Class::Struct;
 use Date::Parse;
 use Exporter;
-use POSIX qw/strftime/;
+#use Remedy::Form::Generic;     # taken care of elsewhere for 
+use Remedy::Form::Utility;
 use Stanford::Remedy::Form;
-use Text::Wrap;
-
-$Text::Wrap::columns = 80;
-$Text::Wrap::huge    = 'overflow';
 
 our @EXPORT    = qw//;
 our @EXPORT_OK = qw/init_struct/;
-our @ISA       = qw/Exporter/;
+our @ISA       = qw/Exporter Remedy::Form::Utility/;
+
+## Registered table names - why yes, it's global
+our %REGISTER;
 
 ##############################################################################
-### Subroutines
+### Subroutines ##############################################################
 ##############################################################################
 
 =head1 FUNCTIONS
@@ -65,45 +62,106 @@ our @ISA       = qw/Exporter/;
 
 =over 4
 
-=item init_struct
+=item init_struct (CLASS [, EXTRAHASH])
 
-Initializes the structur
+Initializes the structure of a Remedy table into the primary Remedy system.  
+This is done by creating a B<Class::Struct> module, consisting of 
 
-Return
+=over 4
 
-Should be used 
+=item remedy_form (B<Stanford::Remedy::Form>)
+
 [...]
+
+=item parent (B<Remedy>)
+
+[...]
+
+=item table ($)
+
+[...]
+
+Note that this function can be (and generally is) overridden by sub-classes,
+which makes it essentially read-only at that point.
+
+=item key_field (%)
+
+[...]
+
+=item (extras)
+
+We can add extra accesors through I<EXTRAHASH>, which is passed into the struct
+initialization directly.  That is, if you wanted to add an additional 'debug'
+field, you might pass in:
+
+  init_struct (__PACKAGE__, 'short', 'debug' => '$');
+
+=item (key fields)
+
+[...]
+
+=back
+
+Returns a two element array: the class B<Remedy::Form>, and the newly generated
+struct.  This can be used to create a workable object inheritance at module
+load time, as so:
+
+    use Remedy::Form qw/init_struct/;
+    our @ISA = init_struct (__PACKAGE__);
+
+Not exported by default, but exportable.
 
 =cut
 
 sub init_struct {
-    my ($class, %extra) = @_;
+    my ($class, $human, %extra) = @_;
     our $new = $class . "::Struct";
+    $human ||= $class;
 
     my %fields;
     my %map = $class->field_map;
     foreach (keys %map) { $fields{$_} = '$' }
-    struct $new => {'parent'    => '$', 
-                    'key_field' => '%', 
-                    'form'      => '$', 
-                    %extra, %fields};
+    struct $new => {'remedy_form' => 'Stanford::Remedy::Form', 
+                    'parent'      => 'Remedy', 
+                    'table'       => '$',
+                    'key_field'   => '%', %extra, %fields};
 
-    $REGISTER{$class}++;
+    $REGISTER{$human} = $class;
 
     return (__PACKAGE__, $new);
 }  
 
-sub registered_form {
-    my ($self, $class) = @_;
-    return unless defined $REGISTER{$class};
-    return $class;
+=item form (TABLE_NAME, EXTRA)
+
+Finds the appropriate sub-class to manage the table named I<TABLE_NAME>.  If 
+this name has been registered with B<init_struct ()> - ie, it's an alias - then
+we will have a class name; if not, we will use B<Stanford::Form::Generic>, and
+set the form name appropriately.
+
+=cut
+
+sub form {
+    my ($self, $name, @extra) = @_;
+    if (my $class = $REGISTER{$name}) { 
+        return $class->new (@extra);
+    } else {
+        _load_table ($self, 'Remedy::Form::Generic');
+        my $form = Remedy::Form::Generic->new ('table' => $name, @extra)
+            || return;
+        $form->table ($name);
+        return $form;
+    }
 }
 
-sub registered { keys %REGISTER }
+sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
+
+=item get (FIELD)
+
+=cut
 
 sub get {
     my ($self, $field) = @_;
-    my $form = $self->form || $self->error ('no form');
+    my $form = $self->remedy_form || $self->error ('no form');
     if (my $key = $self->key_field ($field)) { 
         return $self->$key;
     } else { 
@@ -111,19 +169,26 @@ sub get {
     }
 }
 
+=item set (FIELD, VALUE [, FIELD, VALUE [, FIELD, VALUE [...]]])
+
+=cut
 
 sub set {
     my ($self, %fields) = @_;
-    my $form = $self->form;
+    my $form = $self->remedy_form;
     foreach my $field (keys %fields) { 
         my $value = $self->human_to_data ($field, $fields{$field});
         if (my $key = $self->key_field ($field)) { 
             $self->$key ($value);
         }
-        $self->form->set_value ($field, $value);
+        $self->remedy_form->set_value ($field, $value);
     }
     return $self;
 }
+
+=item human_to_data (FIELD, VALUE)
+
+=cut
 
 sub human_to_data { 
     my ($self, $field, $value) = @_;
@@ -136,6 +201,10 @@ sub human_to_data {
         return $value;
     }
 }
+
+=item data_to_human (FIELD, VALUE)
+
+=cut
 
 sub data_to_human { 
     my ($self, $field, $value) = @_;
@@ -154,15 +223,12 @@ sub data_to_human {
 
 =head2 Database Functions
 
-These functions wrap B<Remedy::Database> with the per-table
-information available from the rest of the class' functions.
-
 All functions in this class that take the argument hash I<ARGHASH> honor 
 the option '':
 
 =over 4
 
-=item ars I<object>
+=item parent I<object>
 
 I<object> is a parent B<Remedy> object that contains a connection to
 the remedy database.  If the option is not offered, then we will use the value
@@ -224,12 +290,25 @@ sub limit_basic {
     @limit;
 }
 
+=item limit_string (TYPE, FIELD)
+
+=cut
+
 sub limit_string {
     my ($self, $type, $field, $text) = @_;
     return "" unless $type;
     return "" if $text eq '%';
     return "'$type' == NULL" unless defined $text;
     return "'$type' = \"$text\"" if defined $text;
+}
+
+=item reload ()
+
+=cut
+
+sub reload {
+    my ($self) = @_;
+    return $self->_init_from_object ($self->remedy_form);
 }
 
 =item save (ARGHASH)
@@ -249,7 +328,7 @@ sub save {
     my ($self, %args) = @_;
 
     ## Make sure all data is reflected in the form
-    my $form = $self->form or $self->error ('no form');
+    my $form = $self->remedy_form or $self->error ('no form');
     
     ## Go through the key fields, and move data if necessary
     my $keyhash = $self->key_field;
@@ -281,34 +360,45 @@ Returns the object on success, or undef on failure.
 
 =cut
 
+=item init 
+
+=over 4 
+
+=item table (I<TABLE>)
+
+=item db (I<Remedy>)
+
+=back
+
+=cut
+
 sub init {
     my ($class, %args) = @_;
     my $parent = $class->parent_or_die (%args);
 
-    # Create the object, and set the parent class
+    ## Create the object, and set the parent class
     my $obj = {};
     bless $obj, $class;
     $obj->parent ($parent);
 
+    ## Go through the field map, and get the key field infromation
     my %map = $class->field_map ();
     foreach my $key (keys %map) { 
         $obj->key_field ($map{$key}, $key)  
     }
+    $obj->table ($args{'table'} || $class->table);
     
     return $obj;
 }
 
-sub reload {
-    my ($self) = @_;
-    return $self->_init_from_form ($self->form);
-}
 
 sub new_from_form {
-    my ($class, $form, %args) = @_;
+    my ($self, $form, $table, %args) = @_;
+    my $class = ref $self ? ref $self : $self;
     return unless ($form && ref $form);
-    my $obj = $class->init (%args);
-    $obj->form ($form);
-    return $obj->_init_from_form ($form);
+    my $obj = $class->init ('table' => $table, %args);
+    $obj->remedy_form ($form);
+    return $obj->_init_from_object ($form);
 }
 
 =item read (PARENT, ARGHASH)
@@ -317,14 +407,6 @@ Reads from the database in the B<Remedy> object I<PARENT>, based on the
 arguments in the argument hash I<ARGHASH>:
 
 =over 4
-
-=item select I<select_ref>
-
-Fields to fetch.  Defaults to B<default_select ()>. 
-
-=item sort I<sort_ref>
-
-How to sort the resulting data.  Defaults to B<default_sort ()>.
 
 =item count I<count_ref>
 
@@ -353,29 +435,64 @@ sub new {
     # Create the object
     my $obj = $class->init ('db' => $parent, %args);
 
-    ## Generate the Remedy form
-    my $form = Stanford::Remedy::Form->new 
-        ('session' => $session, 'name' => $args{'table'} || $class->table) 
-        or $class->error ("couldn't start new form: $@");
+    my $table = $args{'table'} || $class->table;
+    $class->error ('no table name set') unless $table;
 
-    $obj->form ($form);
+    ## Generate the Remedy form
+    local $@;
+    my $form = $class->get_form ($session, $table);
+    if ($@) { 
+        $@ =~ s/ at .*$//;
+        $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;
+        $parent->warn_level ($DEBUG, "no formdata for '$table': $@");
+        return;
+    }
+
+    $obj->remedy_form ($form);
     return $obj;
 }
+
+sub create {
+    my ($self, %args) = @_;
+    my ($parent, $session) = $self->parent_and_session (%args);
+    my $form = $self->get_form ($session, $self->table);
+    return $self->new_from_form ($form, $self->table, 'db' => $parent);
+}
+
+=item get_form (SESSION, TABLE)
+
+Returns a B<Stanford::Remedy::Form> object safely - that is, turns off warnings
+from the parent class and runs the whole block in an 'eval', since the module
+only either returns the object or an error.  Returns the object on success, or
+undef on failure; if there is an error message, it is returned as '$@'.
+
+=cut
+
+sub get_form {
+    my ($self, $session, $table) = @_;
+    return unless (defined $session && defined $table);
+    no warnings;
+    my $form = eval { Stanford::Remedy::Form->new ('session' => $session, 
+        'name' => $table) };
+    if ($@) { return } 
+    return $form;
+}
+
+=item read ([...])
+
+
+=cut
 
 sub read {
     my ($self, %args) = @_;
     my ($parent, $session) = $self->parent_and_session (%args);
+    my $form = $self->get_form ($session, $self->table) || return;
 
-    ## Generate the Remedy form that we'll use to pull out data
-    my $form = Stanford::Remedy::Form->new 
-        ('session' => $session, 'name' => $self->table) 
-        or $self->error ("couldn't start new form: $@");
-
-    ## Figure out how we're limiting our search; most of the standard search
-    ## methods don't currently work.
-    my $limit = join(" AND ", $self->limit (%args));
+    ## Figure out how we're limiting our search
+    my $limit = join (" AND ", $self->limit (%args));
     return unless $limit;
 
+    ## Perform the search
     $parent->warn_level ($DEBUG, sprintf ("read_where (%s, %s)", 
         $self->table, $limit));
     my @entries = $form->read_where ($limit);
@@ -386,7 +503,8 @@ sub read {
     foreach my $entry (@entries) {
         $parent->warn_level ($DEBUG + 1, 
             sprintf ("new_from_form (%s)", $self->table));
-        push @return, $self->new_from_form ($entry, 'db' => $parent);
+        push @return, $self->new_from_form ($entry, $self->table, 
+            'db' => $parent);
     }
 
     return wantarray ? @return : $return[0];
@@ -394,7 +512,7 @@ sub read {
 
 sub insert { shift->save (@_) }
 sub update { shift->save (@_) }
-sub delete {}
+sub delete { return }       # not yet written
 
 =item update (NEWOBJ, ARGHASH)
 
@@ -411,7 +529,7 @@ to use B<register ()>!
 
 =cut
 
-sub update {
+sub update_old_check {
     my ($self, $new, %args) = @_;
     my ($parent, $session) = $self->parent_and_session (%args);
 
@@ -430,73 +548,6 @@ sub update {
     } else {
         return wantarray ? ($self => \%update) : $self;
     }
-}
-
-=back
-
-=head2 Text Functions
-
-=over 4
-
-=item format_email (NAME, EMAIL)
-
-=cut
-
-sub format_email {
-    my ($self, $name, $email) = @_;
-    $name ||= "";
-    if ($email) { 
-        $email .= '@' . $self->parent->config->domain unless $email =~ /@/;
-    } else { $email = "" }
-    return $email ? "$name <$email>" : "$name";
-}   
-
-=item format_text_field (ARGHASHREF, FIELD, TEXT [, FIELD2, TEXT2 [...]))
-
-=cut
-
-sub format_text_field {
-    my ($self, $args, @print) = @_;
-    $args ||= {};
-
-    my $width = $$args{'minwidth'} || 0;
-    my $prefix = $$args{'prefix'} || '';
-
-    my (@return, @entries);
-
-    while (@print) { 
-        my ($field, $text) = splice (@print, 0, 2);
-        $field = "$field:";
-        my $value = defined $text ? $text : "*unknown*";
-        push @entries, [$field, $value];
-        $width = length ($field) if length ($field) > $width;
-    }
-    
-    foreach my $entry (@entries) {
-        my $field = '%-' . $width . 's';
-        push @return, wrap ($prefix, $prefix . ' ' x ($width + 1), sprintf 
-            ("$field %s", @{$entry})); 
-    } 
-
-    return wantarray ? @return : join ("\n", @return, '');   
-}
-
-sub format_text {
-    my ($self, $args, @print) = @_;
-    $args ||= {};
-
-    my $width  = $$args{'minwidth'} || 0;
-    my $prefix = $$args{'prefix'} || '';
-
-    my @return = wrap ($prefix, $prefix, @print);
-    
-    return wantarray ? @return : join ("\n", @return, '');   
-}
-
-sub format_date {
-    my ($self, $time) = @_;  
-    return '(unknown time)' unless $time;
-    return strftime ('%Y-%m-%d %H:%M:%S %Z', localtime ($time));
 }
 
 =back
@@ -566,7 +617,7 @@ The default is a reverse of the schema () hash.
 
 =cut
 
-sub fields { my %schema = shift->schema (@_); return reverse %schema; }
+sub fields { my %schema = shift->schema (@_);  return reverse %schema; }
 
 =item limit (ARGHASH)
 
@@ -580,18 +631,6 @@ passed.
 =cut
 
 sub limit  { shift->limit_basic (@_) }
-
-=item print_html ()
-
-Creates a printable string summarizing information about the object.  Based
-on invocation type, returns either an array of lines that you can print, or a
-single newline-delimited string.
-
-Defaults to use B<debug_html ()>.
-
-=cut
-
-sub print_html { shift->debug_html (@_) }
 
 =item print_text ()
 
@@ -631,8 +670,8 @@ sub field_to_values {
     return %{$values};
 }
 
-sub field_is_enum { shift->field_is ('enum', @_) }
-sub field_is_time { shift->field_is ('time', @_) }
+# sub field_is_enum { shift->field_is ('enum', @_) }
+# sub field_is_time { shift->field_is ('time', @_) }
 
 sub field_is {
     my ($self, $type, $field, %args) = @_;
@@ -647,53 +686,34 @@ sub field_type {
     return lc $href->{$field};
 }
 
+=item pull_formdata ()
+
+=cut
+
 sub pull_formdata {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die (%args);
 
     unless ($parent->formdata ($self->table)) { 
-        my $session = $self->session_or_die (%args);
-        my $form = Stanford::Remedy::Form->new 
-            ('session' => $session, 'name' => $self->table);
+        my $form = $self->get_form ($self->session_or_die (%args),
+            $self->table) || return;     
         my $formdata = $form->get_formdata;
-        $parent->formdata ($self->table, $formdata)
+        $parent->formdata ($self->table, $formdata);
     }
     
     return $parent->formdata ($self->table);
 }
 
-=item table ()
-
-Returns the name of the DBI table.  
-
-Defaults to the string "TABLE NOT SET" (which will probably break most SQL
-implementations in a very clear way).
+=item table_human
 
 =cut
 
-sub table { "TABLE NOT SET" }
-
-=item default_select ()
-
-Returns an array of fields that we will use in B<select ()> to limit the
-search, if no specific list is offered.  
-
-Defaults to an empty array.
-
-=cut
-
-sub default_select { () }
-
-=item default_sort ()
-
-Returns an array of fields that we will use in B<select ()> to sort the search,
-if no specific list is offered.  
-
-Defaults to an empty array.
-
-=cut
-
-sub default_sort   { () }
+sub table_human {
+    my ($class) = @_;
+    my $table = $class;
+    $table =~ s/^Remedy::Form:://;
+    return $table;
+}
 
 =back
 
@@ -722,7 +742,7 @@ Also, re-create debug_html
 sub debug_text {
     my ($self, %args) = @_;
     my %schema = $self->schema (%args);
-    my $form = $self->form;
+    my $form = $self->remedy_form;
 
     my (@entries, @return, %max);
     my ($maxid, $maxfield, $maxvalue);
@@ -757,8 +777,8 @@ sub debug_text {
 
 sub debug_table {
     my ($self) = @_;
-    return unless $self->form;
-    return $self->form->as_string ('no_session' => 1);
+    return unless $self->remedy_form;
+    return $self->remedy_form->as_string ('no_session' => 1);
 }
 
 sub fields_text {}
@@ -807,11 +827,7 @@ Converts the human-readable I<FIELD> to the numeric field ID, with B<schema ()>.
 
 =cut
 
-sub field_to_id { 
-    my ($self, $field, %args) = @_;
-    my %id = reverse $self->schema (%args); 
-    return $id{$field} ;
-}
+sub field_to_id { shift->fields->{shift} }
 
 =item id_to_field (ID)
 
@@ -819,11 +835,7 @@ Converts a numeric I<ID> to the human-readable field name, with B<schema ()>.
 
 =cut
 
-sub id_to_field { 
-    my ($self, $id) = @_;
-    my %schema = $self->schema;
-    return $schema{$id};
-}
+sub id_to_field { shift->schema->{shift} }
 
 =item parent_or_die (ARGHASH)
 
@@ -865,47 +877,8 @@ sub error {
     my ($self, $text, $count) = @_;
     my $func = (caller ($count || 1))[3];
     $text = "unknown error" if (! defined $text);
+    chomp $text;
     die "$func: $text\n";
-}
-
-=item parse_register (CHANGE)
-
-Parse I<CHANGE>, the second component of the output from B<register ()>, into
-a human-readable form.  Returns an array where the first item is the type of
-change, and additional items listing the specific changes:
-
-=over 4
-
-=item insert
-
-The item was freshly inserted; just offer a string saying 'new item'.
-
-=item update
-
-Foreach field in B<field_report()>, list the name of the field and its new 
-value as a single string.
-
-=item (nothing)
-
-There was no change, so don't list anything.
-
-=back
-
-=cut
-
-sub parse_register {
-    my ($self, $changes) = @_;
-    return '' unless $changes;
-    return ('insert', $changes) unless ref $changes;
-
-    my @return;
-    my %map = $self->field_map_reverse;
-    foreach my $field ($self->field_report) {
-        my $value = $changes->{ $field };
-        my $name = $map{$field};
-        push @return, "$name is $value" if defined $value;
-    }
-    return ('update', @return);
 }
 
 =back
@@ -916,12 +889,12 @@ sub parse_register {
 ### Internal Subroutines
 ##############################################################################
 
-### _init_from_form (FORM) 
+### _init_from_object (FORM) 
 # Takes a Stanford::Remedy::Form object, uses it and the basic class 
 # information to (re)populate the Class::Struct fields, and makes sure that 
 # all required fields are set.  This is basically for use after an insert (),
 # select (), or update () to make sure that we're working with viable data.
-sub _init_from_form {
+sub _init_from_object {
     my ($self, $form) = @_;
     my $class = ref $self;
 
@@ -940,6 +913,13 @@ sub _init_from_form {
     return $self;
 }
 
+sub _load_table {
+    my ($self, $class) = @_;
+    local $@;
+    eval "use $class";
+    $self->error ($@) if $@;
+    return 1;
+}
 
 ##############################################################################
 ### Final Documentation

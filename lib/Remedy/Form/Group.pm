@@ -1,25 +1,28 @@
-package Remedy::Department;
+package Remedy::Form::Group;
 our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Department - Department form
+Remedy::Form::Group - Department form
 
 =head1 SYNOPSIS
 
-    use Remedy::Department;
+    use Remedy::Form::Group;
 
     # $remedy is a Remedy object
-    foreach my $dept (Remedy::Department->read ('db' => $remedy, 'all' => 1)) {
-        print scalar $dept->print_text;
+    foreach (Remedy::Form::Group->read ('db' => $remedy, 'all' => 1)) {
+        print scalar $_->print_text;
     }  
 
 =head1 DESCRIPTION
 
-Remedy::Department manages the I<CTM:People Organization> form, which describes
-the organization chart down to the department level.  It is a sub-class of
-B<Remedy::Table>, so most of its functions are described there.
+Remedy::Group manages the I<Group> form, which manages access privileges
+for groups of users.  It is a sub-class of B<Remedy::Form>, so most of its
+functions are described there.
+
+Note that if you're looking for the support group mappings, you should see
+B<Remedy::SupportGroup>.
 
 =cut
 
@@ -30,7 +33,7 @@ B<Remedy::Table>, so most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
+use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
 
@@ -44,38 +47,38 @@ our @ISA = init_struct (__PACKAGE__);
 
 =over 4
 
-=item id (I<People Organization ID>)
+=item id (I<Request ID>)
 
-Internal ID of the entry
+Internal ID of the entry.
 
-=item company (I<Company>)
+=item name (I<Group Name>)
 
-Company name, ie I<Stanford University>
+Name of the group, ie 'Sub Administrator'
 
-=item organization (I<Organization>)
+=item summary (I<Long Group Name>)
 
-Organization name, ie I<Vice President for Business Affairs>
+A short description of the group 
 
-=item department (I<Department>)
+=item description (I<Comments>)
 
-Department name, ie I<IT Services>
+A longer, text description of the purpose of the group
 
 =back
 
 =cut
 
 sub field_map { 
-    'id'           => "People Organization ID",
-    'company'      => "Company",
-    'organization' => "Organization",
-    'department'   => "Department",
+    'id'          => 'Request ID',
+    'name'        => 'Group Name',
+    'summary'     => 'Long Group Name',
+    'description' => 'Comments'
 }
 
 ##############################################################################
 ### Local Functions 
 ##############################################################################
 
-=head2 B<Remedy::Table Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -85,14 +88,13 @@ sub field_map {
 
 sub print_text {
     my ($self) = @_;
-    my @return = "Department information for '" . $self->department . "'";
+    my @return = "Group information for '" . $self->name. "'";
 
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'ID'           => $self->id,
-        'Company'      => $self->company,
-        'Organization' => $self->organization,
-        'Department'   => $self->department,
+        'Name'        => $self->name,
+        'Summary'     => $self->summary,
+        'Description' => $self->description,
     );
 
     return wantarray ? @return : join ("\n", @return, '');
@@ -102,7 +104,7 @@ sub print_text {
 
 =cut
 
-sub table { 'CTM:People Organization' }
+sub table { 'Group' }
 
 =back
 
@@ -114,7 +116,7 @@ sub table { 'CTM:People Organization' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

@@ -1,4 +1,4 @@
-package Remedy::Ticket::Incident;
+package Remedy::Form::Incident;
 our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
@@ -35,7 +35,7 @@ impact, etc of the ticket; but there are a few other places for customization.
 
 =cut
 
-our %TEXT = ('debug' => \&Remedy::Table::debug_text);
+our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 
 =back
 
@@ -49,13 +49,14 @@ use strict;
 use warnings;
 
 use Remedy::Audit;
-use Remedy::Table qw/init_struct/;
+use Remedy::Form qw/init_struct/;
 use Remedy::TicketGen;
 use Remedy::Time;
 use Remedy::WorkLog;
 use Remedy::User;
 
-our @ISA = qw('Remedy::Ticket', init_struct (__PACKAGE__));
+our @ISA = ('Remedy::Ticket', init_struct (__PACKAGE__, 
+    'ticketgen' => 'Remedy::TicketGen'));
 
 ##############################################################################
 ### Subroutines
@@ -394,7 +395,7 @@ sub timelog_create {
 
 =cut
 
-=head2 B<Remedy::Table Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -561,7 +562,7 @@ sub name {
 
 =head1 REQUIREMENTS
 
-B<Remedy::Ticket>, B<Class::Struct>, B<Remedy::Table>
+B<Remedy::Ticket>, B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

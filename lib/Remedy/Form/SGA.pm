@@ -1,4 +1,4 @@
-package Remedy::SGA;
+package Remedy::Form::SGA;
 our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
@@ -18,7 +18,7 @@ Remedy::SGA - Support Group Association form
 =head1 DESCRIPTION
 
 Remedy::SGA manages the I<CTM:Support Group Association> form, which maps
-together users and support groups.  It is a sub-class of B<Remedy::Table>, so
+together users and support groups.  It is a sub-class of B<Remedy::Form>, so
 most of its functions are described there.
 
 [...]
@@ -32,10 +32,11 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
-use Remedy::SupportGroup;
+use Remedy::Form::People;
+use Remedy::Form::SupportGroup;
+use Remedy::Form qw/init_struct/;
 
-our @ISA = init_struct (__PACKAGE__);
+our @ISA = init_struct (__PACKAGE__, 'sga');
 
 ##############################################################################
 ### Class::Struct
@@ -95,15 +96,24 @@ sub field_map {
 sub group {
     my ($self, @rest) = @_;
     return unless $self->group_id;
-    return Remedy::SupportGroup->read ('db' => $self->parent_or_die (@rest),
-        'ID' => $self->group_id, @rest);
+    return Remedy::Form::SupportGroup->read (
+        'db' => $self->parent_or_die (@rest), 'ID' => $self->group_id, @rest);
+}
+
+=item person ()
+
+=cut
+
+sub person {
+    my ($self, @rest) = @_;
+    return unless $self->group_id;
+    return Remedy::Form::People->read ('db' => $self->parent_or_die (@rest),
+        'ID' => $self->person_id, @rest);
 }
 
 =back
 
-sub person {}
-
-=head2 B<Remedy::Table Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -143,7 +153,7 @@ sub table { 'CTM:Support Group Association' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

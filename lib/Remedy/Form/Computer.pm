@@ -1,26 +1,26 @@
-package Remedy::ComputerSystem;
+package Remedy::Form::Computer;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Stanford::Remedy::Worklog - per-ticket worklogs
+Remedy::Computer - per-ticket worklogs
 
 =head1 SYNOPSIS
 
-    use Stanford::Remedy::Worklog;
+    use Remedy::Worklog;
 
-    # $remedy is a Stanford::Remedy object
-    my @worklog = Stanford::Remedy::ComputerSystem->select (
+    # $remedy is a Remedy object
+    my @worklog = Remedy::ComputerSystem->select (
         'db' => $remedy, 'IncNum' => 'INC000000002371');
     for my $wl (@worklog) { print scalar $wl->print_text }
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::ComputerSystem tracks individual work log entries for tickets as part
-of the remedy database.  It is a sub-class of B<Stanford::Packages::Table>, so
-most of its functions are described there.
+Remedy::ComputerSystem tracks individual work log entries for tickets as part
+of the remedy database.  It is a sub-class of B<Remedy::Form>, so most of its
+functions are described there.
 
 =cut
 
@@ -31,7 +31,7 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
+use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
 
@@ -93,7 +93,7 @@ Address of the person who created this worklog entry.  Corresponds to field
 
 =back
 
-=head2 B<Stanford::Remedy::Table Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -170,22 +170,22 @@ sub table { 'BMC.CORE:BMC_ComputerSystem' }
 
 sub schema {
     return (
-          112 => "CMDB Row Level Security",     # must be '1000000000'
-    200000001 => "Serial Number",
-    200000003 => "Category",
-    200000004 => "Type",
-    200000005 => "Item",
-    200000020 => "Name",
-    200000022 => "Physical Memory",
-    240000007 => "Description",
-    240001002 => "Model",
-    240001003 => "Manufacturer",
-    301002900 => "Owner Name",
-    301016000 => "Hostname",
-    301016200 => "Primary Type",                # integer, 1-31
-    400079600 => "ClassID",                     # must be 'BMC_COMPUTERSYSTEM'
-    400127400 => "Dataset ID",
-    490021100 => "UserDisplayObjectName",       # must be 'Computer System'
+#          112 => "CMDB Row Level Security",     # must be '1000000000'
+#    200000001 => "Serial Number",
+#    200000003 => "Category",
+#    200000004 => "Type",
+#    200000005 => "Item",
+#    200000020 => "Name",
+#    200000022 => "Physical Memory",
+#    240000007 => "Description",
+#    240001002 => "Model",
+#    240001003 => "Manufacturer",
+#    301002900 => "Owner Name",
+#    301016000 => "Hostname",
+#    301016200 => "Primary Type",                # integer, 1-31
+#    400079600 => "ClassID",                     # must be 'BMC_COMPUTERSYSTEM'
+#    400127400 => "Dataset ID",
+#    490021100 => "UserDisplayObjectName",       # must be 'Computer System'
     );
 }
 
@@ -199,11 +199,11 @@ sub schema {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Stanford::Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
-Stanford::Remedy(8)
+Remedy(8)
 
 =head1 HOMEPAGE
 

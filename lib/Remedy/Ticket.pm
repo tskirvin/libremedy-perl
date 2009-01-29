@@ -35,7 +35,7 @@ impact, etc of the ticket; but there are a few other places for customization.
 
 =cut
 
-our %TEXT = ('debug' => \&Remedy::Table::debug_text);
+our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 
 =back
 
@@ -49,14 +49,12 @@ use strict;
 use warnings;
 
 use Remedy::Audit;
-use Remedy::Table qw/init_struct/;
+use Remedy::Form qw/init_struct/;
 use Remedy::Ticket::Incident;
 use Remedy::Ticket::Task;
 use Remedy::TicketGen;
 use Remedy::Time;
 use Remedy::WorkLog;
-
-our @ISA = init_struct (__PACKAGE__, 'ticketgen' => 'Remedy::TicketGen');
 
 ##############################################################################
 ### Subroutines
@@ -145,6 +143,33 @@ sub default_desc { "Created by " . __PACKAGE__ }
 sub assignee {
     my ($self) = @_;
     return $self->format_email ($self->assignee_name, $self->assignee_sunet);
+}
+
+=item parse_incident_number (NUMBER)
+
+Given I<NUMBER>, pads that into a valid incident number - that is, something
+that begins with either INC, TAS, or HD0, with a length of 15 characters.  If
+no such prefix is offered, we'll assume you want 'INC', as so:  
+
+  990977        INC000000990977
+
+Returns undef if nothing can be created.
+
+=cut
+
+sub parse_incident_number {
+    my ($self, $num) = @_;
+    return $num if $num && $num =~ /^(HD0|INC|TAS)/ && length ($num) == 15;
+
+    $num ||= "";
+    if ($num =~ /^(HD0|TAS|INC)(\d+)$/) {
+        $num = $1    . ('0' x (12 - length ($num))) . $2;
+    } elsif ($num =~ /^(\d+)/) {
+        $num = 'INC' . ('0' x (12 - length ($num))) . $1;
+    } else {
+        return;
+    }
+    return $num;
 }
 
 =item requestor
@@ -336,7 +361,7 @@ sub audit {
     my ($self, %args) = @_;
     return unless $self->inc_num;
     return Remedy::Audit->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->id, %args);
+        'ID' => $self->id, %args);
 }
 
 =item worklog ()
@@ -347,7 +372,7 @@ sub worklog {
     my ($self, %args) = @_;
     return unless $self->inc_num;
     return Remedy::WorkLog->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->inc_num, %args);
+        'ID' => $self->inc_num, %args);
 }
 
 =item timelog ()
@@ -358,7 +383,7 @@ sub timelog {
     my ($self, %args) = @_;
     return unless $self->inc_num;
     return Remedy::Time->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->inc_num, %args);
+        'ID' => $self->inc_num, %args);
 }
 
 =item worklog_create ()
@@ -386,60 +411,10 @@ sub worklog_create {
 sub timelog_create {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    my $timelog = Remedy::Time->new ( 'db' => $self->parent_or_die (%args));
+    my $timelog = Remedy::Time->new ('db' => $self->parent_or_die (%args));
     $timelog->inc_num ($self->inc_num);
     return $timelog;
 }
-
-=back
-
-=cut
-
-=head2 B<Remedy::Table Overrides>
-
-=over 4
-
-=item field_map
-
-=cut
-
-sub field_map { 
-    'id'                    => "Entry ID",
-    'date_submit'           => "Submit Date",
-    'assignee_sunet'        => "Assignee Login ID",
-    'date_modified'         => "Last Modified Date",
-    'status'                => "Status",
-    'sunet'                 => "SUNet ID+",
-    'requestor_affiliation' => "SU Affiliation_chr",
-    'requestor_email'       => "Requester Email_chr",
-    'incident_type'         => "Incident Type",
-    'summary'               => "Description",
-    'requestor_last_name'   => "Last Name",
-    'requestor_first_name'  => "First Name",
-    'requestor_phone'       => "Phone Number",
-    'status_reason'         => "Status_Reason",
-    'resolution'            => "Resolution",
-    'inc_num'               => "Incident Number",
-    'urgency'               => "Urgency",
-    'impact'                => "Impact",
-    'priority'              => "Priority",
-    'description'           => "Detailed Decription",
-    'assignee_group'        => "Assigned Group",
-    'assignee_name'         => "Assignee",
-    'time_spent'            => "Time Spent (min)",
-    'total_time_spent'      => "Total Time Spent (min)",
-    'date_resolution'       => "Estimated Resolution Date",
-}
-
-=item limit ()
-
-=over 4
-
-=item IncRef I<incref>
-
-=item Type I<status>
-
-=item Unassigned I<value>
 
 =back
 
@@ -449,15 +424,10 @@ sub limit {
     my ($self, %args) = @_;
     my ($parent, $session) = $self->parent_and_session (%args);
 
-    if (my $incnum = $args{'IncNum'}) { 
-        my $id = $self->field_to_id ("Incident Number", 'db' => $parent);
-        return "'$id' == \"$incnum\"";
-    }
-
-    $args{'Assigned Support Company'}      ||= $parent->config->company   || "%";
+    $args{'Assigned Support Company'} ||= $parent->config->company   || "%";
     $args{'Assigned Support Organization'} ||= $parent->config->sub_org   || "%";
-    $args{'Assigned Group'}                ||= $parent->config->workgroup || "%";
-    $args{'Assignee Login ID'}             ||= $parent->config->username  || "%";
+    $args{'Assigned Group'} ||= $parent->config->workgroup || "%";
+    $args{'Assignee Login ID'} ||= $parent->config->username  || "%";
     my @return = $self->limit_basic (%args);
 
     if (my $status = $args{'status'}) { 
@@ -562,7 +532,7 @@ sub name {
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

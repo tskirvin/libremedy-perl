@@ -12,7 +12,8 @@ use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib";
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
 ## Shared configuration file.  Set with '--config'
-our $CONFIG = "/etc/remedy/config";
+# our $CONFIG = "/etc/remedy/config";
+our $CONFIG = "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/etc/remedy/config.sandbox";
 
 ## Print debugging information?  Set with '--debug'
 our $DEBUG = 0;
@@ -25,10 +26,7 @@ our $DEFAULT_GROUP = '';
 our $LOGLEVEL = 1;
 
 ## Tag to include include in the common log file
-our $LOG_TAG = "REMEDY-INFO";
-
-## Will be overridden by '--user' and '--group'
-use vars qw/$USER $GROUP/;
+our $LOG_TAG = "REMEDY-DUMP";
 
 ##############################################################################
 ### Declarations
@@ -40,7 +38,6 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Remedy;
-use Remedy::Form::People;
 use Text::Wrap;
 
 $0 =~ s%.*/%%g;     # Lose the annoying path information
@@ -53,70 +50,42 @@ $|++;               # Flush output
 my $parser = new Getopt::Long::Parser;
 my $result = $parser->getoptions (
     'c|config=s'    => \$CONFIG,
-    'user=s'        => \$USER,
-    'group=s'       => \$GROUP,
-    'd|debug'       => \$DEBUG,
+    'd|debug'       => sub { $DEBUG = 1; $LOGLEVEL = 9 },
     'man'           => sub { pod2usage (-verbose=>2, -noperldoc => 1) },
     'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
-map { untaint ($_) } $CONFIG, $USER, $GROUP;
+map { untaint ($_) } $CONFIG;
 
 debug ("Loading config file $CONFIG") if $CONFIG;
 my $config = eval { Remedy::Config->load ($CONFIG) };
 error ($@) unless $config;
 error ($config) if $@;
 
-$config->debug ($DEBUG ? 9 : $LOGLEVEL);
+$config->debug    ($DEBUG);
+$config->loglevel ($LOGLEVEL);
 
-my ($query, @rest) = @ARGV;
-$query ||= '(none)';
+my ($table, @rest) = @ARGV;
+error_usage ('need a table name') unless $table;
+load_table ($table);
 
 debug ("Connecting to database");
 my $remedy = eval { Remedy->connect ($config) }
     or error ("couldn't connect to database: $@");
 error ($@) if $@;
 
-if (lc $query eq 'table') {   
-    my ($table) = @rest;
-    error_usage ('need a table name') unless $table;
-
-    debug ("Getting all information about table '$table'");
-    my $obj = $remedy->create ($table);
-    if (defined $obj) { 
-        print scalar $obj->debug_table;
-        exit 0;
-    } else {
-        print "No information for '$table'; known values:\n";
-        foreach (sort $remedy->registered_classes) { print " * $_\n" }
-        exit 1;
+debug ("Printing all entries in table '$table'");
+my @entries = eval { $remedy->read ($table, 'all' => 1) };
+if ($@) { 
+    print "No information for '$table'; possible values:\n";
+    foreach (sort $remedy->registered_classes) { print " * $_\n" }
+    exit 1;
+} elsif (scalar @entries) { 
+    foreach my $entry (@entries) { 
+        print scalar $entry->print_text;
     }
-
-} elsif (lc $query eq 'userinfo') { 
-    my ($user) = @rest;
-    $user ||= $USER || $DEFAULT_USER;
-    error_usage ('need a user name') unless $user;
-
-    my %search = ('SUNET ID' => $user);
-    debug ("Printing user information for '$user'");
-    foreach my $obj ($remedy->read ('person', %search)) {
-        print scalar $obj ->print_text ($DEBUG);
-    }
-
-} elsif (lc $query eq 'groupinfo') {
-    my ($group) = @rest;
-    $group ||= $GROUP || $DEFAULT_GROUP;
-    error_usage ('need a group name') unless $group;
-
-    my %search = ('Support Group Name' => $group);
-    debug ("Printing group information for '$group'");
-    foreach my $obj ($remedy->read ('supportgroup', %search)) { 
-        print scalar $obj->print_text ($DEBUG);
-    }
-
-} elsif (lc $query eq 'help') {
-    pod2usage (-verbose => 2, -exit_status => 0, -noperldoc => 1);
-
-} else { error_usage ("invalid query type: '$query'") }
-
+} else {
+    print "No entries in table '$table'\n";
+}
+    
 exit 0;
 
 ##############################################################################
@@ -154,7 +123,7 @@ sub untaint {
     return '' unless defined $text;
     if ($text =~ m%^($match)$%) { return $1 } 
     else                        { error ("tainted data: '$text' ($match)") }
-}
+}   
 
 ##############################################################################
 ### Documentation
@@ -162,53 +131,20 @@ sub untaint {
 
 =head1 NAME
 
-remedy - prints information about the Remedy database
+remedy-dump - print all information from a Remedy table
 
 =head1 SYNOPSIS
 
-B<remedy> table I<TABLE>
-
-B<remedy> userinfo I<USERNAME>
-
-B<remedy> groupinfo I<GROUPNAME>
+B<remedy-dump> I<TABLE>
 
 B<remedy> --help
 
 =head1 DESCRIPTION
 
-B<remedy> pulls and prints information about the Remedy database, or about the
-users and support groups managed within.
+remedy-dump pulls and prints all entries from the given I<TABLE> in the Remedy
+database. 
 
 =head1 OPTIONS
-
-=head2 MODES
-
-=over 4
-
-=item table I<TABLE>
-
-Pulls and prints information about the table described in the perl module
-I<TABLE>.  Loads the module first, so that we can load arbitrary installed
-modules.
-
-=item userinfo I<USERNAME>
-
-Prints information about the user I<USERNAME>, including the full name, the
-user's department and phone number, and a count and listing of its associated 
-support groups.
-
-=item groupinfo I<GROUPNAME>
-
-Prints information about the support group I<GROUPNAME>, including the group
-name, its associated email addresses, and a count and listing of its members.
-
-=item help
-
-Prints a basic help message and exits.
-
-=back
-
-=head2 FLAGS
 
 =over 4
 
@@ -219,12 +155,7 @@ default.
 
 =item B<-d>, B<--debug>
 
-Print debugging information, both within this module and within the Remedy
-module.
-
-=item B<--group> I<GROUP>
-
-Sets the group that we'll use with the I<groupinfo> query.  No default.
+Print debugging information, both within the 
 
 =item B<-h>, B<--help>
 
@@ -234,32 +165,7 @@ Prints out the synopsis information and exits.
 
 Prints out the full help documentation and exits.
 
-=item B<--user> I<USER>
-
-Sets the user to run the I<userinfo> query about.  Defaults to
-$ENV{'REMOTE_USER'} (if set by remctl) or $ENV{'USER'} (if set by 
-
 =back
-
-=head1 EXAMPLES
-
-=over 4
-
-=item remedy table Remedy::Person
-
-Prints out all information about the table I<Remedy::Person>
-
-=item remedy userinfo tskirvin
-
-Prints out information about username I<tskirvin>.
-
-=item remedy groupinfo 'ITS Unix Systems'
-
-Prints out information about group I<ITS Unix Systems>. 
-
-=back
-
-=cut
 
 =head1 FILES
 
@@ -274,10 +180,6 @@ Remedy configuration file, parsed by B<Remedy::Config>.
 =head1 REQUIREMENTS
 
 B<Remedy>
-
-=head1 SEE ALSO
-
-B<Remedy::Config>, B<Remedy::Person>, B<Remedy::SupportGroup>
 
 =head1 AUTHOR
 

@@ -16,10 +16,6 @@ $WORKGROUP = "ITS Unix Systems";
 $USERNAME  = "";
 $DOMAIN    = "stanford.edu",
 
-## Where will we log our usage?
-$LOGFILE  = "/tmp/remedy_log-debug.txt";
-$LOGLEVEL = 9;
-
 ## Maximum number of entries to return on a search.
 $SEARCH_COUNT = 100;
 

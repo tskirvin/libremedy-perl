@@ -1,10 +1,10 @@
-package Remedy::SupportGroup;
+package Remedy::Form::SupportGroup;
 our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::SupportGroup - Department form
+Remedy::Form::SupportGroup - 
 
 =head1 SYNOPSIS
 
@@ -17,12 +17,12 @@ Remedy::SupportGroup - Department form
 
 =head1 DESCRIPTION
 
-Remedy::SupportGroup manages the I<SupportGroup> form, which manages access privileges
-for groups of users.  It is a sub-class of B<Remedy::Table>, so most of its
-functions are described there.
+Remedy::Form::SupportGroup manages the I<SupportGroup> form, which manages
+access privileges for groups of users.  It is a sub-class of B<Remedy::Form>,
+so most of its functions are described there.
 
-Note that if you're looking for the support group mappings, you should see
-B<Remedy::SupportSupportGroup>.
+Note that if you're looking for the regular group mappings, you should see
+B<Remedy::Form::Group>.
 
 =cut
 
@@ -33,10 +33,10 @@ B<Remedy::SupportSupportGroup>.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
-use Remedy::SGA;
+use Remedy::Form qw/init_struct/;
+use Remedy::Form::SGA;
 
-our @ISA = init_struct (__PACKAGE__);
+our @ISA = init_struct (__PACKAGE__, 'supportgroup');
 
 ##############################################################################
 ### Class::Struct
@@ -71,15 +71,29 @@ A longer, text description of the purpose of the group
 sub field_map { 
     'id'          => 'Support Group ID',
     'name'        => 'Support Group Name',
-    #'summary'     => 'Long SupportGroup Name',
-    #'description' => 'Comments'
+    'email'       => 'Alternate Group Email Address',
 }
 
 ##############################################################################
 ### Local Functions 
 ##############################################################################
 
-=head2 B<Remedy::Table Overrides>
+sub person {
+    my ($self, @rest) = @_;
+    my @sga = $self->sga (@rest);
+    my @return;
+    foreach my $sga (@sga) { push @return, $sga->person }
+    return @return;
+}
+
+sub sga {
+    my ($self, @rest) = @_;
+    return unless $self->id; 
+    return Remedy::Form::SGA->read ('db' => $self->parent_or_die (@rest),
+        'Support Group ID' => $self->id, @rest);
+}
+
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -89,14 +103,17 @@ sub field_map {
 
 sub print_text {
     my ($self) = @_;
-    my @return = "SupportGroup information for '" . $self->name. "'";
+    my @return = "Group information for '" . $self->name. "'";
+
+    my @people = $self->person;
 
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Name'        => $self->name,
-        #'Summary'     => $self->summary,
-        #'Description' => $self->description,
+        'Name'                => $self->name,
+        'Group Email Address' => $self->email || '(none)',
+        'Number of Members'   => scalar @people || 0,
     );
+    foreach my $person (@people) { push @return, '    ' . $person->name }
 
     return wantarray ? @return : join ("\n", @return, '');
 }
@@ -117,7 +134,7 @@ sub table { 'CTM:Support Group' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

@@ -1,6 +1,6 @@
-#########################################################################
-### Stanford::Remedy Configuration 
-#########################################################################
+###############################################################################
+### Remedy Configuration 
+###############################################################################
 # $Id: remedy.conf 4522 2008-06-27 17:53:33Z tskirvin $
 
 ## Where is the server hosted, and how do we connect to it?
@@ -15,10 +15,6 @@ $SUB_ORG   = "IT Services";
 $WORKGROUP = "";
 $USERNAME  = "";
 $DOMAIN    = "stanford.edu";
-
-## Where will we log our usage?
-$LOGFILE  = "/tmp/remedy_log-debug.txt";
-$LOGLEVEL = 9;
 
 ## When we're printing text, wrap at this many characters
 $TEXT_WRAP = 79;

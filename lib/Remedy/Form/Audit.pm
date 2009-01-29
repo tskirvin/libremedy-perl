@@ -1,4 +1,4 @@
-package Remedy::Audit;
+package Remedy::Form::Audit;
 our $VERSION = "0.50";
 # Copyright and license are in the documentation below.
 
@@ -12,7 +12,7 @@ Remedy::Audit - per-ticket worklogs
 
     # $remedy is a Remedy object
     my @audit = Remedy::Audit->read ('db' => $remedy, 
-        'EID' => 'INC000000002371');
+        'ID' => 'INC000000002371');
     for my $item (@audit) { print scalar $item->print_text }
 
 =head1 DESCRIPTION
@@ -31,7 +31,7 @@ B<Remedy::Task> tables.
 use strict;
 use warnings;
 
-use Remedy::Table qw/init_struct/;
+use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
 
@@ -82,37 +82,6 @@ sub field_map {
     'data'        => "Log",
 }
 
-=item limit (ARGS)
-
-Takes the following arguments:
-
-=over 4
-
-=item IncRef I<incref>
-
-If set, then we will just search based on the Incident Number.
-
-=back
-
-Defaults to B<limit_basic ()>.
-
-=cut
-
-sub limit {
-    my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
-
-    my %hash = $self->schema (%args);
-    # foreach (sort {$a<=>$b} %hash) { warn "  $_: $hash{$_}\n" }
-    
-    if (my $incnum = $args{'EID'}) { 
-        my $id = $self->field_to_id ("Original Request ID", 'db' => $parent);
-        return "'$id' == \"$incnum\"";
-    }
-
-    return $self->limit_basic (%args);
-}
-
 =item print_text ()
 
 Returns a short list of the salient points of the audit entry - the creation
@@ -138,8 +107,6 @@ sub print_text {
 
 =item table ()
 
-'HPD:HelpDesk_AuditLogSystem'
-
 =cut
 
 sub table { 'HPD:HelpDesk_AuditLogSystem' }
@@ -154,7 +121,7 @@ sub table { 'HPD:HelpDesk_AuditLogSystem' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

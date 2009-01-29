@@ -1,9 +1,9 @@
 package Remedy::Config;
-our $VERSION = '0.50';
+our $VERSION = '0.52';
 
 =head1 NAME
 
-Remedy::Config - Configuration for Stanford::Remedy
+Remedy::Config - Configuration for Remedy
 
 =head1 SYNOPSIS
 
@@ -14,8 +14,7 @@ Remedy::Config - Configuration for Stanford::Remedy
     
 =head1 DESCRIPTION
 
-Remedy::Config encapsulates all of the configuration information
-for B<Stanford::Remedy>.  
+Remedy::Config encapsulates all of the configuration information for B<Remedy>.
 
 It is implemented as a Perl class that declares and sets the defaults for
 various configuration variables and then loads (in order of preference) the
@@ -42,8 +41,7 @@ This configuration file should end with the line:
 
     1;
 
-This ensures that Perl doesn't think there is an error when loading the
-file.
+This ensures that Perl doesn't think there is an error when loading the file.
 
 =cut
 
@@ -66,8 +64,6 @@ struct 'Remedy::Config' => {
     'remedy_port' => '$',
     'remedy_user' => '$',
     'remedy_pass' => '$',
-    'logfile'     => '$',
-    'loglevel'    => '$',
     'sub_org'     => '$', 
     'username'    => '$',
     'workgroup'   => '$',
@@ -87,7 +83,7 @@ All of the configuration options below have a related B<Class::Struct> accessor
 
 =item $REMEDY_HOST, $REMEDY_PORT, $REMEDY_USER, $REMEDY_PASS
 
-Connection details for the primary Remedy server.  
+Connection details for the primary Remedy server.
 
 Matches the B<remedy_host>, B<remedy_port>, B<remedy_user>, and B<remedy_pass>
 accessors.
@@ -119,20 +115,6 @@ Matches the I<domain> accessor.
 
 our ($DOMAIN);
 
-=item $LOGFILE, $LOGLEVEL
-
-Defines how much information to log, and where.  $LOGFILE sets a file where
-the logs are archived; defaults to F</var/log/remedy-api.txt>.  $LOGLEVEL sets
-an integer value to how much information to store, where 0 is no logging and 9
-is maximum logging; defaults to 5.
-
-Matches the B<logfile> and B<loglevel> accessors.
-
-=cut
-
-our $LOGFILE  = "/var/log/remedy-api.txt";
-our $LOGLEVEL = 5;
-
 =item $CONFIG
 
 The location of the configuration file we're going to load to get defaults.  
@@ -148,12 +130,12 @@ our $CONFIG = '/etc/remedy/config';
 
 =item $DEBUG
 
-If set, then items created from this configuration object will have their
-'debug' mode set.  Defaults to 0.
+Defines how much debugging information to print to STDERR.  Is set to an
+integer value, where 0 is no logging and 9 is maximum logging; defaults to 5.
 
 =cut
 
-our $DEBUG = 0;
+our $DEBUG = 5;
 
 =item $SEARCH_COUNT 
 
@@ -208,9 +190,8 @@ sub load {
 
     $self->count       ($SEARCH_COUNT);
     $self->company     ($COMPANY);
+    $self->debug       ($DEBUG);
     $self->domain      ($DOMAIN);
-    $self->logfile     ($LOGFILE);
-    $self->loglevel    ($LOGLEVEL);
     $self->remedy_host ($REMEDY_HOST);
     $self->remedy_pass ($REMEDY_PASS);
     $self->remedy_port ($REMEDY_PORT);
@@ -252,7 +233,7 @@ Class::Struct(8), Remedy(8)
 
 =head1 HOMEPAGE
 
-[...]
+TBD.
 
 =head1 AUTHOR
 
@@ -260,7 +241,7 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-Copyright 2008 Board of Trustees, Leland Stanford Jr. University
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
 
 This program is free software; you may redistribute it and/or modify
 it under the same terms as Perl itself.

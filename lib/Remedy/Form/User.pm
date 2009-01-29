@@ -1,4 +1,4 @@
-package Remedy::User;
+package Remedy::Form::User;
 our $VERSION = "0.12";
 our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
@@ -29,9 +29,11 @@ most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Table;
+use Remedy::Form qw/init_struct/;
 
-our @ISA = (Remedy::Table::init_struct (__PACKAGE__));
+use Remedy::Form::People;
+
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
 ### Class::Struct
@@ -59,7 +61,7 @@ These
 ### Local Functions 
 ##############################################################################
 
-=head2 B<Remedy::Table Overrides>
+=head2 B<Remedy::Form Overrides>
 
 =over 4
 
@@ -115,7 +117,7 @@ sub table { 'User' }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Table>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
