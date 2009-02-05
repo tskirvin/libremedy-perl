@@ -36,7 +36,10 @@ use Remedy::Form::People;
 use Remedy::Form::SupportGroup;
 use Remedy::Form qw/init_struct/;
 
-our @ISA = init_struct (__PACKAGE__, 'sga');
+our @ISA = init_struct (__PACKAGE__);
+
+Remedy::Form->register ('sga', __PACKAGE__);
+Remedy::Form->register ('supportgroupassocation', __PACKAGE__);
 
 ##############################################################################
 ### Class::Struct

@@ -30,6 +30,7 @@ use strict;
 use warnings;
 
 use Class::Struct;
+use Log::Log4perl qw/:easy/;
 use POSIX qw/strftime/;
 
 use Remedy::Config;
@@ -38,7 +39,8 @@ use Remedy::Session;
 
 struct 'Remedy' => {
     'config'     => 'Remedy::Config',
-    'debugl'     => '$',
+    'debug '     => '$',
+    'logger'     => 'Log::Log4perl::Logger',
     'formdata'   => '%',
     'session'    => 'Remedy::Session',
 };
@@ -58,6 +60,8 @@ struct 'Remedy' => {
 =item config (B<Remedy::Config>)
 
 =item debug ($)
+
+=item logger (B<Remedy::Log>)
 
 =item formdata (%)
 
@@ -79,18 +83,28 @@ I<CONF> is a B<Remedy::Config> object, which contains details of how we will con
 
 sub connect {
     my ($class, $config, %args) = @_;
-
     my $self = $class->new ();
 
     # Load and store configuration information
-    my $conf = $config if ($config && ref $config);
-    $conf ||= Remedy::Config->new ($config);
+    my $conf = ($config && ref $config) ? $config 
+                                        : Remedy::Config->load ($config);
     $self->config ($conf);
+
+    # Get the logger
+    my $logger = $self->config->logger;
+    $self->logger ($logger);
+
+    $logger->debug ('1 debug');
+    $logger->info  ('1 info');
+    $logger->warn  ('1 warn');
+    $logger->error ('1 error');
+    $logger->fatal ('1 fatal');
+
 
     # Gather basic information from the configuration file; there's more to 
     # be had, but this is a good start.
-    my $host = $conf->remedy_host or $self->error ('$REMEDY_HOST not set');
-    my $user = $conf->remedy_user or $self->error ('$REMEDY_USER not set');
+    my $host = $conf->remedy_host or die "\$REMEDY_HOST not set\n";
+    my $user = $conf->remedy_user or die "\$REMEDY_USER not set\n";
 
     my %opts = ( 
         'password' => $conf->remedy_pass, 
@@ -99,20 +113,33 @@ sub connect {
         'username' => $user
     );
 
-    $self->warn_level (5, "creating remedy session to $host as $user");
-    my $session = Remedy::Session->new (%opts)
-        or $self->error ("Couldn't create object: $@");
+    $logger->debug ("creating remedy session to $host as $user");
+    my $session = Remedy::Session->new (%opts) 
+        or $logger->logdie ("couldn't create object: $@");
     $self->session ($session);
 
     local $@;
-    $self->warn_level (5, "connecting to remedy server");
+    $logger->debug ("connecting to remedy server");
     my $ctrl = eval { $session->connect () };
     unless ($ctrl) { 
         $@ =~ s/ at .*$//;
-        $self->error ("error on connect: $@");
+        $logger->logdie ("error on connect: $@");
     }
 
     return $self;
+}
+
+=item form (TABLE)
+
+Returns the B<Remedy::Form> object corresponding to the table name I<TABLE>,
+which can either be an internal Remedy table name, or a registered shortname
+offered by the local forms.  See B<Remedy::Form::form ()> for more details.
+
+=cut
+
+sub form {
+    my ($self, $form_name) = @_;
+    return Remedy::Form->form ($form_name, 'db' => $self);
 }
 
 =back
@@ -129,27 +156,32 @@ sub connect {
 
 =item create (FORM_NAME)
 
+may not actually be what I want
+
 =cut
 
-sub create {
-    my ($self, $form_name) = @_;
-    my $form = Remedy::Form->form ($form_name, 'db' => $self) || return;
-    return $form->create ('db' => $self);
+sub create { 
+    my ($self, $form_name, @args) = @_;
+    return $self->_doit ('create', 1, @_) 
 }
 
 =item read (FORM_NAME, ARGS)
 
 =cut
 
-sub read   { 
+sub read { 
     my ($self, $form_name, @args) = @_;
-    my $form = Remedy::Form->form ($form_name, 'db' => $self) || return;
-    return $form->read ('db' => $self, @args);
+
+    my @return;
+    foreach my $form ($self->form ($form_name)) {
+        push @return, $form->read (@args);
+    }
+    return @return;
 }
 
 =item update (FORM_NAME, [...])
 
-Not yet tested, probably wrong.  In fact, probably ought to do this atomically.
+Not yet tested, probably wrong.  Probably ought to do this atomically.
 
 =cut
 
@@ -178,6 +210,7 @@ sub delete {
     }
     return $count;
 }
+
 
 =item registered_classes ()
 
@@ -220,11 +253,17 @@ sub warn_level {
 
 =item error (TEXT)
 
-Exits with an error message I<TEXT>.
+Exits with an error message I<TEXT>.  Should be eliminated.
 
 =cut
 
-sub error { die shift->warn_level (0, @_), "\n" }
+sub logdie {
+    my ($self, $logger, @error) = @_;
+    $logger->fatal (@error);
+    my $error = "$@";  
+    chomp $error;
+    die "$error\n";
+}
 
 ###############################################################################
 ### Internal Subroutines ######################################################

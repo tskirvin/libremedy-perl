@@ -12,8 +12,7 @@ use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib";
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
 ## Shared configuration file.  Set with '--config'
-# our $CONFIG = "/etc/remedy/config";
-our $CONFIG = "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/etc/remedy/config.sandbox";
+our $CONFIG = "/etc/remedy/config";
 
 ## Print debugging information?  Set with '--debug'
 our $DEBUG = 0;
@@ -60,12 +59,10 @@ my $config = eval { Remedy::Config->load ($CONFIG) };
 error ($@) unless $config;
 error ($config) if $@;
 
-$config->debug    ($DEBUG);
-$config->loglevel ($LOGLEVEL);
+$config->debug ($DEBUG ? 9 : $LOGLEVEL);
 
 my ($table, @rest) = @ARGV;
 error_usage ('need a table name') unless $table;
-load_table ($table);
 
 debug ("Connecting to database");
 my $remedy = eval { Remedy->connect ($config) }
@@ -80,7 +77,12 @@ if ($@) {
     exit 1;
 } elsif (scalar @entries) { 
     foreach my $entry (@entries) { 
-        print scalar $entry->print_text;
+        my $print = scalar $entry->print_text;
+        print $print;
+        if ($DEBUG);
+            my $debug = scalar $entry->debug_text;
+            if ($debug != $print) { print "\nRaw Data:\n$debug" }
+        }
     }
 } else {
     print "No entries in table '$table'\n";
@@ -97,22 +99,6 @@ sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
 sub error_usage { 
     my ($error) = @_;
     pod2usage (-exit_status => 2, -verbose => 1, -message => $error) 
-}
-
-### load_table (TABLE)
-# Runs 'require' on TABLE, so we can arbitrary load tables
-sub load_table {
-    my ($table) = @_;
-    $table = untaint ($table);
-    debug ("Loading table information about '$table'");
-    local $@;
-    eval "require $table";
-    if (my $error = $@) { 
-        # $error =~ s/ in \@INC.*$//;
-        $error =~ s/ at .*$//;
-        error ($error);
-    }
-    return 1;
 }
 
 ### untaint (TEXT, MATCH)

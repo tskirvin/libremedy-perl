@@ -17,7 +17,6 @@
 
 * 'set pending' for the status field 
 
-
 * Simple 'reassign to ITS Help Desk Level 2' option, probably with aliases
   for common groups; also wildcard searches for groups
 
@@ -31,3 +30,5 @@
   assigned to them?
 
 * "Number of hours worked" on assign/close
+
+* Homepage

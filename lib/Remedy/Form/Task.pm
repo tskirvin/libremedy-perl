@@ -30,10 +30,13 @@ use strict;
 use warnings;
 
 use Remedy::Form qw/init_struct/;
+
 use Remedy::Ticket;
 
-our @ISA = ('Remedy::Ticket', init_struct (__PACKAGE__, 
-    'ticketgen' => 'Remedy::TicketGen'));
+our @ISA = init_struct (__PACKAGE__, 'ticketgen' => 'Remedy::Form::TicketGen');
+unshift @ISA, 'Remedy::Ticket::Functions'; 
+
+Remedy::Form->register ('task', __PACKAGE__);
 
 ##############################################################################
 ### Class::Struct
@@ -72,6 +75,8 @@ These
 sub field_map { 
     # 'netid'     => "Login Name",
 }
+
+sub limit_status { }
 
 =item name ()
 

@@ -3,7 +3,7 @@ our $VERSION = '0.52';
 
 =head1 NAME
 
-Remedy::Config - Configuration for Remedy
+Remedy::Config - Remedy configuration files and logging
 
 =head1 SYNOPSIS
 
@@ -53,23 +53,29 @@ use strict;
 use warnings;
 
 use Class::Struct;
+use Remedy::Log;
 
-struct 'Remedy::Config' => {
-    'company'     => '$',
-    'config'      => '$',
-    'count'       => '$',
-    'debug'       => '$',
-    'domain'      => '$',
-    'remedy_host' => '$',
-    'remedy_port' => '$',
-    'remedy_user' => '$',
-    'remedy_pass' => '$',
-    'sub_org'     => '$', 
-    'username'    => '$',
-    'workgroup'   => '$',
-    'wrap'        => '$'
-};
-    
+my %options = (
+    'company'       => '$',
+    'config'        => '$',
+    'count'         => '$',
+    'debug_level'   => '$',
+    'domain'        => '$',
+    'logfile'       => '$',
+    'logfile_level' => '$',
+    'log'           => 'Remedy::Log',
+    'remedy_host'   => '$',
+    'remedy_port'   => '$',
+    'remedy_user'   => '$',
+    'remedy_pass'   => '$',
+    'sub_org'       => '$',
+    'username'      => '$',
+    'workgroup'     => '$',
+    'wrap'          => '$',
+);
+
+struct 'Remedy::Config' => {%options};
+
 ##############################################################################
 ### Configuration
 ##############################################################################
@@ -128,14 +134,31 @@ Matches the B<config> accessor.
 
 our $CONFIG = '/etc/remedy/config';
 
-=item $DEBUG
+=item $DEBUG_LEVEL
 
-Defines how much debugging information to print to STDERR.  Is set to an
-integer value, where 0 is no logging and 9 is maximum logging; defaults to 5.
+Defines how much debugging information to print on user interaction.  Set to
+a string, defaults to 'ERROR'.  See B<Remedy::Log> for more details.
 
 =cut
 
-our $DEBUG = 5;
+our $DEBUG_LEVEL = $Log::Log4perl::ERROR;
+
+=item $LOGFILE
+
+If set, we will also save additional logs to this file using B<Log::Log4perl>.  
+
+=cut
+
+our $LOGFILE = "";
+
+=item $LOGFILE_LEVEL
+
+Like $DEBUG_LEVEL, but defines the level of log messages we'll print to
+I<$LOGFILE>.  Defaults to 3.
+
+=cut
+
+our $LOGFILE_LEVEL = $Log::Log4perl::INFO;
 
 =item $SEARCH_COUNT 
 
@@ -168,7 +191,7 @@ our $TEXT_WRAP = 80;
 
 =head1 SUBROUTINES 
 
-As noted above, most subroutines are handled by B<Struct::Class>; please see
+As noted above, most subroutines are handled by B<Class::Struct>; please see
 its man page for more details about the various sub-functions.
 
 =over 4
@@ -184,31 +207,60 @@ generate its default values.  Returns the new object.
 sub load {
     my ($class, $file) = @_;
     $file ||= $ENV{'REMEDY_CONFIG'} || $CONFIG;
-    do $file or die ("Couldn't load '$file': " . ($@ || $!) . "\n");
-
+    do $file or LOGDIE ("Couldn't load '$file': " . ($@ || $!) . "\n");
     my $self = $class->new ();
 
-    $self->count       ($SEARCH_COUNT);
-    $self->company     ($COMPANY);
-    $self->debug       ($DEBUG);
-    $self->domain      ($DOMAIN);
-    $self->remedy_host ($REMEDY_HOST);
-    $self->remedy_pass ($REMEDY_PASS);
-    $self->remedy_port ($REMEDY_PORT);
-    $self->remedy_user ($REMEDY_USER);
-    $self->sub_org     ($SUB_ORG);
-    $self->username    ($USERNAME);
-    $self->workgroup   ($WORKGROUP);
-    $self->wrap        ($TEXT_WRAP);
-
     $self->config ($file);
+    _init_options ($self);
+
+    my $log = Remedy::Log->new (
+        'name'       => 'Remedy',
+        'file'       => $self->logfile,
+        'level_file' => $self->logfile_level,
+        'level'      => $self->debug_level
+    );
+    $log->init;
+
+    $self->log ($log);
 
     $self;
+}
+
+sub logger {
+    my ($self, $category) = @_;
+    return unless $self->log;
+    return $self->log->logger ();
 }
 
 =back
 
 =cut
+
+##############################################################################
+### Internal Subroutines
+##############################################################################
+
+### _init_options ()
+# takes care of setting the various options.
+sub _init_options {
+    my ($self) = @_;
+    $self->count         ($SEARCH_COUNT);
+    $self->company       ($COMPANY);
+    $self->debug_level   ($DEBUG_LEVEL);
+    $self->domain        ($DOMAIN);
+    $self->logfile       ($LOGFILE);
+    $self->logfile_level ($LOGFILE_LEVEL);
+    $self->remedy_host   ($REMEDY_HOST);
+    $self->remedy_pass   ($REMEDY_PASS);
+    $self->remedy_port   ($REMEDY_PORT);
+    $self->remedy_user   ($REMEDY_USER);
+    $self->sub_org       ($SUB_ORG);
+    $self->username      ($USERNAME);
+    $self->workgroup     ($WORKGROUP);
+    $self->wrap          ($TEXT_WRAP);
+    $self;
+}
+
 
 ##############################################################################
 ### Final Documentation 
@@ -229,7 +281,7 @@ configuration file to load instead of F</etc/remedy/config>.
 
 =head1 SEE ALSO
 
-Class::Struct(8), Remedy(8)
+Class::Struct(8), Remedy(8), Remedy::Log(8)
 
 =head1 HOMEPAGE
 

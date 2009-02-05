@@ -34,6 +34,7 @@ use Remedy::Form qw/init_struct/;
 use Remedy::Form::People;
 
 our @ISA = init_struct (__PACKAGE__);
+Remedy::Form->register ('user', __PACKAGE__);
 
 ##############################################################################
 ### Class::Struct

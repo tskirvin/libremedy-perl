@@ -48,15 +48,20 @@ our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 use strict;
 use warnings;
 
-use Remedy::Audit;
-use Remedy::Form qw/init_struct/;
-use Remedy::TicketGen;
-use Remedy::Time;
-use Remedy::WorkLog;
-use Remedy::User;
+use Remedy::Ticket;
 
-our @ISA = ('Remedy::Ticket', init_struct (__PACKAGE__, 
-    'ticketgen' => 'Remedy::TicketGen'));
+use Remedy::Form qw/init_struct/;
+
+use Remedy::Form::Audit;
+use Remedy::Form::TicketGen;
+use Remedy::Form::Time;
+use Remedy::Form::WorkLog;
+use Remedy::Form::User;
+
+our @ISA = init_struct (__PACKAGE__, 'ticketgen' => 'Remedy::Form::TicketGen');
+unshift @ISA, 'Remedy::Ticket::Functions'; 
+
+Remedy::Form->register ('incident', __PACKAGE__);
 
 ##############################################################################
 ### Subroutines
@@ -84,6 +89,12 @@ sub assign  {
 }
 sub resolve {}
 sub set_status {}
+
+sub read_lala {
+    warn "\@_: @_\n";
+    warn "@ISA\n";
+    return SUPER::read (@_);
+}
 
 =cut
 
@@ -120,7 +131,7 @@ sub get_incnum {
     if (! $self->ticketgen) {
         my %args = ('db' => $parent);
 
-        my $ticketgen = Remedy::TicketGen->new (%args) or $self->error 
+        my $ticketgen = Remedy::Form::TicketGen->new (%args) or $self->error 
             ("couldn't create new ticket number: " .  $session->error );
         $ticketgen->description ($args{'description'} || $self->default_desc);
         $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
@@ -429,65 +440,6 @@ sub field_map {
     'time_spent'            => "Time Spent (min)",
     'total_time_spent'      => "Total Time Spent (min)",
     'date_resolution'       => "Estimated Resolution Date",
-}
-
-=item limit ()
-
-=over 4
-
-=item IncRef I<incref>
-
-=item Type I<status>
-
-=item Unassigned I<value>
-
-=back
-
-=cut
-
-sub limit {
-    my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
-
-    if (my $incnum = $args{'IncNum'}) { 
-        my $id = $self->field_to_id ("Incident Number", 'db' => $parent);
-        return "'$id' == \"$incnum\"";
-    }
-
-    $args{'Assigned Support Company'}      ||= $parent->config->company   || "%";
-    $args{'Assigned Support Organization'} ||= $parent->config->sub_org   || "%";
-    $args{'Assigned Group'}                ||= $parent->config->workgroup || "%";
-    $args{'Assignee Login ID'}             ||= $parent->config->username  || "%";
-    my @return = $self->limit_basic (%args);
-
-    if (my $status = $args{'status'}) { 
-        my $id = $self->field_to_id ("Status", 'db' => $parent);
-        if (lc $status eq 'open') { 
-            push @return, "'$id' < \"Resolved\"";
-        } elsif (lc $status eq 'closed') { 
-            push @return, "'$id' >= \"Resolved\"";
-        }
-    }
-
-#('Assigned Group*+' = "ITS Unix Systems" OR 'Assigned Group*+' = "ITS AFS" OR
-#'Assigned Group*+' = "ITS Directory Tech" OR 'Assigned Group*+' = "ITS Email
-#Servers" OR 'Assigned Group*+' = "ITS Kerberos" OR 'Assigned Group*+' = "ITS
-#Pubsw" OR 'Assigned Group*+' = "ITS Usenet" OR 'Assigned Group*+' = "ITS Web
-#Infrastructure") AND ('Status*' = "Assigned" OR 'Status*' = "In Progress" OR
-#'Status*' = "Pending" OR 'Status*' = "New") AND ('Last Modified Date' <= $DATE$
-#- (5*60*24*60)) AND ('Incident Type*' = "Request")
-#
-    
-    if ($args{'unassigned'}) { 
-        warn "unassigned\n";
-        my $id = $self->field_to_id ("Assignee Login ID", 'db' => $parent);
-        push @return, "'$id' == NULL";
-    }
-
-    if ($args{'before'}) { 
-        # ...
-    }
-    return @return;
 }
 
 =item print_text ()

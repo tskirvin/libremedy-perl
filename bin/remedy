@@ -14,15 +14,12 @@ use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 ## Shared configuration file.  Set with '--config'
 our $CONFIG = "/etc/remedy/config";
 
-## Print debugging information?  Set with '--debug'
-our $DEBUG = 0;
+## Print debugging information?  Set with '--debug', can be set many times
+our $DEBUG_LEVEL = 0;
 
 ## Defaults for 'userinfo' and 'groupinfo'
 our $DEFAULT_USER  = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
 our $DEFAULT_GROUP = '';
-
-## Higher is more verbose ('9' is the highest).  Set to 9 with '--debug'
-our $LOGLEVEL = 1;
 
 ## Tag to include include in the common log file
 our $LOG_TAG = "REMEDY-INFO";
@@ -38,6 +35,7 @@ use strict;
 use warnings;
 
 use Getopt::Long;
+use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
 use Pod::Usage;
 use Remedy;
 use Remedy::Form::People;
@@ -55,39 +53,42 @@ my $result = $parser->getoptions (
     'c|config=s'    => \$CONFIG,
     'user=s'        => \$USER,
     'group=s'       => \$GROUP,
-    'd|debug'       => \$DEBUG,
+    'd|debug+'      => \$DEBUG_LEVEL,
     'man'           => sub { pod2usage (-verbose=>2, -noperldoc => 1) },
     'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
+
 map { untaint ($_) } $CONFIG, $USER, $GROUP;
 
-debug ("Loading config file $CONFIG") if $CONFIG;
 my $config = eval { Remedy::Config->load ($CONFIG) };
-error ($@) unless $config;
-error ($config) if $@;
+die "$@\n" unless $config;
+die "$config\n" if $@;
 
-$config->debug ($DEBUG ? 9 : $LOGLEVEL);
+# Still want it to log the fact that we ran to the logfile!
+
+my $logger = $config->log->logger;
 
 my ($query, @rest) = @ARGV;
 $query ||= '(none)';
 
-debug ("Connecting to database");
+$logger->debug ("Connecting to database");
 my $remedy = eval { Remedy->connect ($config) }
-    or error ("couldn't connect to database: $@");
-error ($@) if $@;
+    or $logger->logdie ("couldn't connect to database: $@");
+$logger->logdie ($@) if $@;
 
 if (lc $query eq 'table') {   
     my ($table) = @rest;
     error_usage ('need a table name') unless $table;
 
-    debug ("Getting all information about table '$table'");
-    my $obj = $remedy->create ($table);
-    if (defined $obj) { 
-        print scalar $obj->debug_table;
-        exit 0;
-    } else {
-        print "No information for '$table'; known values:\n";
-        foreach (sort $remedy->registered_classes) { print " * $_\n" }
-        exit 1;
+    $logger->info ("Getting all information about table '$table'");
+    foreach my $obj ($remedy->form ($table)) {
+        if (defined $obj) { 
+            print scalar $obj->debug_table;
+            exit 0;
+        } else {
+            print "No information for '$table'; known values:\n";
+            foreach (sort $remedy->registered_classes) { print " * $_\n" }
+            exit 1;
+        }
     }
 
 } elsif (lc $query eq 'userinfo') { 
@@ -96,9 +97,18 @@ if (lc $query eq 'table') {
     error_usage ('need a user name') unless $user;
 
     my %search = ('SUNET ID' => $user);
-    debug ("Printing user information for '$user'");
-    foreach my $obj ($remedy->read ('person', %search)) {
-        print scalar $obj ->print_text ($DEBUG);
+    $logger->info ("Printing user information for '$user'");
+    my @return = $remedy->read ('people', %search);
+    if (! scalar @return) { 
+        $logger->logdie ("no matching entries") 
+    }
+    foreach my $obj (@return) { 
+        my $print = scalar $obj->print_text;
+        print $print;
+        if ($DEBUG_LEVEL) {
+            my $debug = scalar $obj->debug_text;
+            if ($debug ne $print) { print "\nRaw Data:\n$debug" }
+        } 
     }
 
 } elsif (lc $query eq 'groupinfo') {
@@ -107,9 +117,10 @@ if (lc $query eq 'table') {
     error_usage ('need a group name') unless $group;
 
     my %search = ('Support Group Name' => $group);
-    debug ("Printing group information for '$group'");
+    $logger->info ("Printing group information for '$group'");
     foreach my $obj ($remedy->read ('supportgroup', %search)) { 
-        print scalar $obj->print_text ($DEBUG);
+        print scalar ($DEBUG_LEVEL ? $obj->debug_text 
+                                   : $obj->print_text);
     }
 
 } elsif (lc $query eq 'help') {
@@ -123,27 +134,11 @@ exit 0;
 ### Subroutines 
 ##############################################################################
 
-sub debug { warn "$0: @_\n" if $DEBUG }
-sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
+### error_usage (ERROR)
+# Uses Pod::Usage to print an error message and the usage information
 sub error_usage { 
     my ($error) = @_;
     pod2usage (-exit_status => 2, -verbose => 1, -message => $error) 
-}
-
-### load_table (TABLE)
-# Runs 'require' on TABLE, so we can arbitrary load tables
-sub load_table {
-    my ($table) = @_;
-    $table = untaint ($table);
-    debug ("Loading table information about '$table'");
-    local $@;
-    eval "require $table";
-    if (my $error = $@) { 
-        # $error =~ s/ in \@INC.*$//;
-        $error =~ s/ at .*$//;
-        error ($error);
-    }
-    return 1;
 }
 
 ### untaint (TEXT, MATCH)
@@ -153,7 +148,7 @@ sub untaint {
     $match ||= '[a-zA-Z0-9_./: -]*';
     return '' unless defined $text;
     if ($text =~ m%^($match)$%) { return $1 } 
-    else                        { error ("tainted data: '$text' ($match)") }
+    else                        { die "tainted data: '$text' ($match)\n" }
 }
 
 ##############################################################################
@@ -273,11 +268,11 @@ Remedy configuration file, parsed by B<Remedy::Config>.
 
 =head1 REQUIREMENTS
 
-B<Remedy>
+B<Remedy>, B<Remedy::Form::People>
 
 =head1 SEE ALSO
 
-B<Remedy::Config>, B<Remedy::Person>, B<Remedy::SupportGroup>
+B<Remedy::Config>, B<Remedy::Form>, B<Remedy::Form::SupportGroup>
 
 =head1 AUTHOR
 

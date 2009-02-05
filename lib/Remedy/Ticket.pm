@@ -37,6 +37,13 @@ impact, etc of the ticket; but there are a few other places for customization.
 
 our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 
+our %FORM = (
+    'all'      => ['Remedy::Form::Incident', 'Remedy::Form::Task'],
+    'incident' => 'Remedy::Form::Incident',
+    'task'     => 'Remedy::Form::Task',
+);
+    # might add Remedy::Form::Order
+
 =back
 
 =cut
@@ -48,13 +55,21 @@ our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 use strict;
 use warnings;
 
-use Remedy::Audit;
-use Remedy::Form qw/init_struct/;
-use Remedy::Ticket::Incident;
-use Remedy::Ticket::Task;
-use Remedy::TicketGen;
-use Remedy::Time;
-use Remedy::WorkLog;
+use Class::Struct;
+
+use Remedy;
+use Remedy::Ticket::Functions;
+
+use Remedy::Form::Audit;
+use Remedy::Form::Incident;
+use Remedy::Form::Task;
+use Remedy::Form::TicketGen;
+use Remedy::Form::Time;
+use Remedy::Form::WorkLog;
+
+our @ISA = qw/Remedy/; 
+
+Remedy::Form->register ('ticket', $FORM{'all'});
 
 ##############################################################################
 ### Subroutines
@@ -69,6 +84,36 @@ use Remedy::WorkLog;
 =item close (TEXT)
 
 =cut
+
+sub forms { 
+    my ($self, $check) = @_;
+    $check ||= 'all';
+    my $return = $FORM{lc $check};
+    return unless defined $return;
+    return ref $return ? @$return : ($return);
+}
+
+sub read_old   {
+    warn "R: @_\n";
+    my ($self, $form_name, @args) = @_;
+
+    my @types = $self->forms ($form_name);
+    return "no such search type: '$form_name'" unless scalar @types;
+        
+    my @return;
+    foreach my $type (@types) {
+        warn "T: $type\n";
+        my $form = $self->form ($type) || return;
+        push @return, $form->read (@args);
+    }
+    @return;
+}
+
+sub form {
+    my ($self, $form_name) = @_;
+    Remedy::Form->form ($form_name, 'db' => $self);
+}
+
 
 sub close {
     my ($self, $text, %args) = @_;
@@ -393,8 +438,6 @@ incident number.  You will still have to add other data.
 
 =over 4
 
-=item timelog_create (TIME)
-
 =back
 
 =cut
@@ -408,57 +451,19 @@ sub worklog_create {
     return $worklog;
 }
 
+=item timelog_create (TIME)
+
+=cut
+
 sub timelog_create {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    my $timelog = Remedy::Time->new ('db' => $self->parent_or_die (%args));
+    my $timelog = $self->parent_or_die (%args)->create ('Remedy::Form::Time');
     $timelog->inc_num ($self->inc_num);
     return $timelog;
 }
 
 =back
-
-=cut
-
-sub limit {
-    my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
-
-    $args{'Assigned Support Company'} ||= $parent->config->company   || "%";
-    $args{'Assigned Support Organization'} ||= $parent->config->sub_org   || "%";
-    $args{'Assigned Group'} ||= $parent->config->workgroup || "%";
-    $args{'Assignee Login ID'} ||= $parent->config->username  || "%";
-    my @return = $self->limit_basic (%args);
-
-    if (my $status = $args{'status'}) { 
-        my $id = $self->field_to_id ("Status", 'db' => $parent);
-        if (lc $status eq 'open') { 
-            push @return, "'$id' < \"Resolved\"";
-        } elsif (lc $status eq 'closed') { 
-            push @return, "'$id' >= \"Resolved\"";
-        }
-    }
-
-#('Assigned Group*+' = "ITS Unix Systems" OR 'Assigned Group*+' = "ITS AFS" OR
-#'Assigned Group*+' = "ITS Directory Tech" OR 'Assigned Group*+' = "ITS Email
-#Servers" OR 'Assigned Group*+' = "ITS Kerberos" OR 'Assigned Group*+' = "ITS
-#Pubsw" OR 'Assigned Group*+' = "ITS Usenet" OR 'Assigned Group*+' = "ITS Web
-#Infrastructure") AND ('Status*' = "Assigned" OR 'Status*' = "In Progress" OR
-#'Status*' = "Pending" OR 'Status*' = "New") AND ('Last Modified Date' <= $DATE$
-#- (5*60*24*60)) AND ('Incident Type*' = "Request")
-#
-    
-    if ($args{'unassigned'}) { 
-        warn "unassigned\n";
-        my $id = $self->field_to_id ("Assignee Login ID", 'db' => $parent);
-        push @return, "'$id' == NULL";
-    }
-
-    if ($args{'before'}) { 
-        # ...
-    }
-    return @return;
-}
 
 =item print_text ()
 

@@ -8,18 +8,19 @@ Remedy::Form::Generic - generic remedy forms
 
 =head1 SYNOPSIS
 
-    use Remedy::Department;
+    use Remedy::Form;  # automatically loads Remedy::Form::Generic
 
     # $remedy is a Remedy object
-    foreach my $dept (Remedy::Department->read ('db' => $remedy, 'all' => 1)) {
-        print scalar $dept->print_text;
+    foreach my $obj ($remedy->read ('TABLENAME', 'option1' => 'value1',
+        'option2' => 'value2', 'option3' => 'value3' )) {
+        print scalar $obj->print_text;
     }  
 
 =head1 DESCRIPTION
 
-Remedy::Department manages the I<CTM:People Organization> form, which describes
-the organization chart down to the department level.  It is a sub-class of
-B<Remedy::Form>, so most of its functions are described there.
+Remedy::Form::Generic is used to look at forms in a "generic" manner, where all
+we know is the name of the form (eg I<CTM:People>).  It is both a sub-class of,
+and a helper class to, B<Remedy::Form>, so its functions are described there.
 
 =cut
 
@@ -30,9 +31,10 @@ B<Remedy::Form>, so most of its functions are described there.
 use strict;
 use warnings;
 
-use Remedy::Form qw/init_struct/;
+use Class::Struct;
+use Remedy::Form;
 
-our @ISA = init_struct (__PACKAGE__, 'generic');
+our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
 ### Class::Struct
@@ -40,15 +42,50 @@ our @ISA = init_struct (__PACKAGE__, 'generic');
 
 =head1 FUNCTIONS
 
-=head2 B<Class::Struct> Accessors
+=item init_struct ()
 
-None.
+Like B<Remedy::Form::init_struct ()>, except that we don't actually register
+any class names; there are no 'extras' or named accessors; and the returned
+base class is 'Remedy::Form'.
+
+=cut
+
+sub init_struct {
+    my ($class, %extra) = @_;
+    our $new = $class . "::Struct";
+
+    struct $new => {'remedy_form' => 'Stanford::Remedy::Form',
+                    'parent'      => 'Remedy',
+                    'table'       => '$',
+                    'key_field'   => '%'};
+
+    return ('Remedy::Form', $new);
+}
+
+=item field_map ()
+
+Empty.  Generic forms have no field maps.
 
 =cut
 
 sub field_map { }
 
+=item print_text ()
+
+Points back at B<debug_text ()> (from B<Remedy::Form::Utility>).
+
+=cut
+
+sub print_text { shift->debug_text (@_) }
+
+=item table_human ()
+
+Returns the table name set at creation time.  Overrides the default function.
+
+=cut
+
 sub table_human { shift->table }
+
 
 ###############################################################################
 ### Final Documentation
@@ -56,11 +93,7 @@ sub table_human { shift->table }
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Form>
-
-=head1 SEE ALSO
-
-Remedy(8)
+B<Remedy::Form>
 
 =head1 HOMEPAGE
 

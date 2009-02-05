@@ -12,15 +12,13 @@ use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib";   # not id
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
 ## Shared configuration file.  Set with '--config'
-our $CONFIG = "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/etc/remedy/config.sandbox";
-# our $CONFIG = "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/etc/remedy/config";
-# our $CONFIG = "/etc/remedy/config";
+our $CONFIG = "/etc/remedy/config";
 
 ## Number of days to go back for the 'unresolved' search. 
-our $DAYS = 7;
+our $DAYS = 0;
 
 ## Print debugging information?  Set with '--debug'
-our $DEBUG = 0;
+our $DEBUG_LEVEL = 0;
 
 ## Default group information.  Related to, but not set by, '--group'.
 our $DEFAULT_GROUP = '';
@@ -30,9 +28,6 @@ our $DEFAULT_USER = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
 
 ## Default request type, for convenience
 our $DEFAULT_TYPE = "base";
-
-## Higher is more verbose ('9' is the highest).  Set to 9 with '--debug'
-our $LOGLEVEL = 1;
 
 ## Tag to include include in the common log file
 our $LOG_TAG = "REMEDY-TKT";
@@ -50,10 +45,13 @@ our $TIME = 0;
 use strict;
 use warnings;
 
+use Data::Dumper;
+
 use Getopt::Long;
+# use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
+use Log::Log4perl qw/get_logger/;
 use Pod::Usage;
 use Remedy;
-use Remedy::Person;
 use Remedy::Ticket;
 use Text::Wrap;
 
@@ -74,25 +72,61 @@ my $result = $parser->getoptions (
     'user=s'        => \$USER,
     'group=s'       => \$GROUP,
     'status=s'      => \$STATUS,
-    'd|debug'       => sub { $DEBUG = 1; $LOGLEVEL = 9 },
+    'd|debug+'      => \$DEBUG_LEVEL,
     'man'           => sub { pod2usage (-verbose=>2, -noperldoc => 1) },
     'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
 map { untaint ($_) } $CONFIG, $TIME, $DAYS, $USER, $GROUP, $STATUS;
 
-debug ("Loading config file $CONFIG") if $CONFIG;
-my $config = eval { Remedy::Config->load ($CONFIG) };
-error ($@) unless $config;
-error ($config) if $@;
+# my $logger = get_logger ('screen');
+# my $logger = get_logger ('Remedy');
+my $logger = get_logger ("$0-screen");
+$logger->fatal ("testing lala");
 
-$config->debug ($DEBUG ? 9 : $LOGLEVEL);
+
+warn "L: $logger\n";
+# print Dumper ($logger);
+
+$logger->debug ('0 should not see this debug');
+$logger->info  ('0 should not see this info');
+$logger->warn  ('0 should not see this warn');
+$logger->error ('0 should not see this error');
+$logger->fatal ('0 should not see this fatal');
+
+my $remedy = Remedy::Ticket->connect ($CONFIG)
+    or $logger->logdie ("couldn't connect to database: $@");
+$logger->logdie ($@) if $@;
+
+$logger = get_logger ("$0-screen");
+
+if ($DEBUG_LEVEL) {
+    # Log::Log4perl->appender_thresholds_adjust ($DEBUG_LEVEL);
+    $logger->more_logging ($DEBUG_LEVEL) if $DEBUG_LEVEL >= 1;
+}
+
+# $logger = $remedy->logger;
+# print Dumper ($logger);
+
+$logger->debug ('3 should not see this debug');
+$logger->info  ('3 should not see this info');
+$logger->warn  ('3 should not see this warn');
+$logger->error ('3 should not see this error');
+$logger->fatal ('3 should not see this fatal');
+
+
+$logger->fatal ("testing lala 3");
+
+$logger->logdie ('testing');
+
+#if ($remedy->logger) { 
+#    $logger = $remedy->logger;
+#    if ($DEBUG_LEVEL) { 
+#        $logger->more_logging ($DEBUG_LEVEL);
+#    }
+#}
 
 my ($query, @rest) = @ARGV;
 $query ||= '(none)';
 
-debug ("Connecting to database");
-my $remedy = eval { Remedy->connect ($config) }
-    or error ("couldn't connect to database: $@");
-error ($@) if $@;
 
 if (lc $query eq 'ticket') { 
     my ($inc, $type, @args) = @rest;
@@ -111,28 +145,68 @@ if (lc $query eq 'ticket') {
     print scalar $tkt->print_text (@list);
     exit 0;
 
-} elsif (lc $query eq 'list') { 
-    my ($type, @extra) = @rest;
 
-    my %hash = ('user' => $USER, 'group' => $GROUP, 'status' => $STATUS);
+
+
+
+
+} elsif (lc $query eq 'list') { 
+    my ($type, $user, @extra) = @rest;
+
+    my %hash;
+    $hash{'user'}   = $USER   if defined $USER;
+    $hash{'group'}  = $GROUP  if defined $GROUP;
+    $hash{'status'} = $STATUS if defined $STATUS;
+
+    $user ||= $USER || $DEFAULT_USER;
+
+    my @text;
     $type ||= 'assign';
-    debug ("finding tickets of type '$type'");
+    $logger->info ("finding tickets of type '$type'");
     if (lc $type eq 'unresolved') { 
-        my $time = time - $DAYS * 86400;
-        $hash{'before'} = $time;
-        $hash{'days'} = $DAYS;
+        $hash{'status'} = 'open';
+        push @text, "open tickets";
+        
     } elsif (lc $type eq 'unassigned') { 
         $hash{'unassigned'}++;
+        push @text, "unassigned tickets";
+        
     } elsif (lc $type eq 'assign') {
-        $hash{'user_assign'} = shift @extra || $USER || $DEFAULT_USER;
+        $hash{'user_assign'} = $user;
+        $user = '';
+
     } elsif (lc $type eq 'submit') {
         $hash{'user_submit'} = $USER || $DEFAULT_USER;
-    } else { pod2usage (-verbose => 1) }
+        $user = '';
 
-    foreach my $tkt ($remedy->list (%hash)) { 
+    } else { error_usage ("invalid list type: '$type'") }
+
+    if ($DAYS) {
+        $hash{'last_modify_before'} = time - $DAYS * 86400;
+        push @text, "unmodified for $DAYS days";
+    }
+
+    if ($user) { 
+        my %person_search = ('SUNET ID' => $user);
+        my @return = $remedy->read ('people', %person_search);
+        $logger->logdie ("user '$user' does not belong to any groups")
+            unless scalar @return;
+        my @groups;
+        foreach (@return) { push @groups, $_->group }
+
+        if (scalar @groups) {
+            push @text, "in all member groups of '$user'";
+            $hash{'groups'} = \@groups;
+        }
+        warn "G: @groups\n";
+    }
+
+    $logger->info ("finding tickets where %s", join (", ", @text));
+    foreach my $tkt ($remedy->read ('ticket', %hash)) { 
         print scalar $tkt->summary_text;
     }
     exit 0;
+
 
 } elsif (lc $query eq 'assign') { 
     my ($inc, @args) = @rest;
@@ -151,11 +225,14 @@ if (lc $query eq 'ticket') {
     }
     # ...and don't forget to add the 'set status' option!
 
+
+
+
 } elsif (lc $query eq 'time_spent') { 
     my ($inc, $minutes) = @rest;
     my $tkt = get_ticket ($remedy, $inc) || error ("no ticket");
 
-    debug ("Adding timelog information to ticket " . $tkt->inc_num);
+    $logger->info ("Adding timelog information to ticket " . $tkt->inc_num);
 
     # $tkt->time_spent ($minutes)
     my $timelog = $tkt->timelog_create ();
@@ -172,13 +249,16 @@ if (lc $query eq 'ticket') {
         error ("Error saving timelog entry: $@");
     }
 
+
+
+
 } elsif (lc $query eq 'worklog') { 
     my ($inc, $text) = @rest;
     my $incnum = $remedy->parse_incident_number ($inc)
         or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
     pod2usage (-verbose => 1) unless defined $incnum;
 
-    debug ("Adding worklog information to ticket $incnum");
+    $logger->info ("Adding worklog information to ticket $incnum");
     my $tkt = $remedy->incident ($incnum)
         or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
 
@@ -204,7 +284,7 @@ if (lc $query eq 'ticket') {
 } elsif (lc $query eq 'help') {
     pod2usage (-verbose => 2, -exit_status => 0, -noperldoc => 1);
 
-} else { error ("Invalid query type: '$query'") }
+} else { error_usage ("invalid query type: '$query'") }
 
 exit 0;
 
@@ -212,7 +292,6 @@ exit 0;
 ### Subroutines 
 ##############################################################################
 
-sub debug { warn "$0: @_\n" if $DEBUG }
 sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
 sub error_usage { 
     my ($error) = @_;
@@ -223,7 +302,7 @@ sub get_ticket {
     my ($remedy, $inc) = @_;
     my $incnum = $remedy->parse_incident_number ($inc)
         or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
-    debug ("Getting information about ticket $incnum");
+    # debug ("Getting information about ticket $incnum");
     my $tkt = $remedy->ticket ($incnum)
         or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
     return $tkt;

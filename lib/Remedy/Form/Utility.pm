@@ -1,6 +1,13 @@
 package Remedy::Form::Utility;
 
 ##############################################################################
+### Configuration ############################################################
+##############################################################################
+
+## Number of characters designated for the field name in the debug functions
+our $DEBUG_CHARS = 30;
+
+##############################################################################
 ### Declarations #############################################################
 ##############################################################################
 
@@ -15,6 +22,67 @@ $Text::Wrap::huge    = 'overflow';
 ##############################################################################
 ### Subroutines ##############################################################
 ##############################################################################
+
+=item debug_text ()
+
+Like B<debug_html ()>, but creates a plaintext string instead, which looks
+something like this:
+
+    FIELD_ID1  FIELD_NAME1  VALUE
+    FIELD_ID2  FIELD_NAME2  VALUE
+
+This is all wrapped with B<Text::Wrap> in a vaguely logical manner. 
+
+TODO: put some of the field numbers back in, at least if they're requested.
+Also, re-create debug_html
+
+=cut
+
+sub debug_text {
+    my ($self, %args) = @_;
+    my %schema = $self->schema (%args);
+    my $form = $self->remedy_form;
+
+    my (@entries, @return, %max);
+    my ($maxid, $maxfield, $maxvalue);
+    foreach my $id (sort {$a<=>$b} keys %schema) {
+        next unless defined $schema{$id};
+        my $field = $schema{$id} || "*unknown*";
+
+        my $value = $self->get ($schema{$id});
+        next unless defined $value;
+        $value =~ s/^\s+|\s+$//g;
+
+        $max{'id'}    = length ($id)    if length ($id)    > $max{'id'};
+        $max{'field'} = length ($field) if length ($field) > $max{'field'};
+
+        push @entries, [$id, $field, $value];
+    }
+
+    $max{'field'} = $DEBUG_CHARS if $max{'field'} > $DEBUG_CHARS;
+
+    foreach my $entry (@entries) {
+        my ($id, $field, $value) = @{$entry};
+        my $id_field    = '%'  . $max{'id'}    . 'd';
+        my $field_field = '%-' . $max{'field'} . 's';
+        my $size  = $max{'id'} + $max{'field'} + 2;
+        my $form = "$id_field $field_field %s";
+        push @return, wrap ('', ' ' x ($size), 
+            sprintf ($form, $id, $field, $value));
+    } 
+
+    wantarray ? @return : join ("\n", @return, '');
+}
+
+=item debug_table ()
+
+=cut
+
+sub debug_table {
+    my ($self) = @_;
+    return unless $self->remedy_form;
+    return $self->remedy_form->as_string ('no_session' => 1);
+}
 
 =item format_date (TIME)
 
