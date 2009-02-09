@@ -150,7 +150,6 @@ sub register {
     return $REGISTER{lc $human} unless defined $class;
     $REGISTER{lc $human} = ref $class ? $class : [$class];
     return $class;
-    
 }
 
 =item form (FORM_NAME, ARGHASH)
@@ -171,21 +170,31 @@ I<ARGHASH>.
 
 sub form {
     my ($self, $name, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
+    my $parent = $self->parent_or_die (%args, 
+        'text' => 'need a Remedy parent object');
+    my $logger = $parent->logger_or_die;
 
     my @return;
     if (my $class = $REGISTER{$name}) {
-        return unless ref $class;
-        foreach (@$class) {
-            push @return, $_->new ('table' => $_->table, 'db' => $parent);
+        my @classes = ref $class ? @$class : $class;
+        $logger->debug (sprintf ("%d %s associated with '%s'", 
+            scalar @classes, scalar @classes == 1 ? 'class' 
+                                                  : 'classes', $name));
+        foreach (@classes) {
+            my $table = $_->table;
+            $logger->debug ("form for '$name' is '$_' (table '$table')");
+            push @return, $_->new ('table' => $table, 'parent' => $parent);
         }
     } else {
+        $logger->debug ("creating a generic form for '$name'");
         my $form = Remedy::Form::Generic->new ('table' => $name, 
-            'db' => $parent);
+            'parent' => $parent);
         return unless $form;
+        $logger->debug ("setting table name for generic form");
         $form->table ($name);
         push @return, $form;
     }
+    $logger->all (_plural (scalar @return, 'form', 'forms') . ' returned');
     return @return;
 }
 
@@ -214,7 +223,10 @@ Returns the new object, or undef on failure (after sending some warnings with
 
 sub new {
     my ($class, %args) = @_;
-    my ($parent, $session) = $class->parent_and_session (%args);
+    my $parent = $class->parent_or_die (%args, 
+        'text' => 'need a Remedy parent object');
+    my $logger = $parent->logger_or_die;
+    my $session = $parent->session_or_die;
 
     my $logger = $parent->config->logger;
 
@@ -288,12 +300,13 @@ sub set {
 =cut
 
 sub human_to_data {
-    my ($self, $field, $value) = @_;
-    if      ($self->field_is ('enum', $field)) {
-        my %hash = reverse $self->field_to_values ($field);
+    my ($self, $field, $value, %args) = @_;
+    if      ($self->field_is ('enum', $field, %args)) {
+        my %hash = reverse $self->field_to_values ($field, %args);
         return defined $hash{$value} ? $hash{$value} 
-                                     : '-1';            # will never match
-    } elsif ($self->field_is ('time', $field)) {
+                                     : undef; 
+                                     # : '-1';            # will never match
+    } elsif ($self->field_is ('time', $field, %args)) {
         return str2time ($value) || $value;
     } else {
         return $value;
@@ -344,20 +357,13 @@ exception.
 
 =item limit_basic (ARGHASH)
 
-Gathers the components of a I<limit_ref> for B<select ()>. Looks at each
-field listed in B<fields ()>, and creates an array of limit components based
-on B<limit_string ()> in B<Remedy::Database>.  Follows these
-arguments in the hash I<ARGHASH>:
+Gathers the components of a I<limit_ref> for B<read()>. Looks at each
+field listed in B<fields ()>, and creates an array of limit components
+
+Follows these arguments in the hash I<ARGHASH>:
 
 =over 4
 
-=item limit I<limit_ref>
-
-Returns I<limit_ref> verbatim.
-
-=item extra I<arrayref>
-
-Adds the components of I<arrayref> into the array of limit components.
 
 =item all I <anything>
 
@@ -366,43 +372,108 @@ Adds the components of I<arrayref> into the array of limit components.
 If this is offered, then we will only search for this item - that is, a search
 of "'1' == \"I<number>\"".  
 
+=item extra I<arrayref>
+
+Adds the components of I<arrayref> into the array of limit components.  This
+makes it easy to 
+
 =back
+
+=over 4
+
+=item enum
+
+=over 4
+
+=item +
+
+'ID' > VALUE
+
+=item -
+
+'ID' < VALUE
+
+=item +=
+
+'ID' >= VALUE
+
+=item -=
+
+'ID' <= VALUE
+
+=item (normal)
+
+'ID' = VALUE
+
+=back
+
+=item time I<STRING>
+
+Parses I<STRING> with B<Date::Parse::str2time ()> to get a valid Unix
+timestamp.  
+
+Understands the concept of the '+/-' prefix.  
+
+=over 4
+
+=item +
+
+'ID' >= TIMESTAMP
+
+=item -
+
+'ID' < TIMESTAMP
+
+=item (normal)
+
+'ID' == TIMESTAMP
+
+=back
+
+=item other 
+
+All other 
 
 Returns an array of limiting components
 
 =cut
 
-sub limit_basic {
+sub limit {
     my ($self, %args) = @_;
-    return $args{'limit'} if $args{'limit'};
-    my $parent = $self->parent_or_die (%args);
+    my $parent = $self->parent_or_die;
+    my $logger = $parent->logger_or_die;
 
-    if (my $incnum = $args{'ID'}) { return "'1' == \"$incnum\"" }
+    if (my $id = $args{'ID'}) { return "'1' == \"$id\"" }
+    if ($args{'all'}) { return '1=1' }
+
+    _args_trace ($logger, 'before limit_pre()', %args) if $logger->is_all;
+    %args = $self->limit_pre (%args);
+    _args_trace ($logger, 'after  limit_pre()', %args) if $logger->is_all;
 
     my @limit;
+    if (my $extra = $args{'extra'}) { 
+        push @limit, ref $extra ? @$extra : $extra;  
+        delete $args{'extra'};
+    }
+
     my %fields = $self->fields (%args);
     foreach my $field (keys %fields) {
-        next unless defined $args{$field};
-        my $limit = $self->limit_string ($fields{$field}, $field, 
-            $args{$field});
-        push @limit, $limit if $limit;
+        next unless exists $args{$field};
+
+        ## Create the limit string
+        my @args = ($fields{$field}, $field, $args{$field});
+        my $limit = _limit_string ($self, @args);
+        next unless defined $limit;
+
+        push @limit, $limit;
+        $logger->all ("adding limit: $limit");
     }
-    if (my $extra = $args{'extra'}) { push @limit, @$extra }
-    push @limit, '1=1' if $args{'all'};
 
+    $logger->all ('limit_post ()');
+    %args = $self->limit_post (@limit);
+
+    $logger->debug ("limit: ", join (', ', @limit));
     @limit;
-}
-
-=item limit_string (TYPE, FIELD)
-
-=cut
-
-sub limit_string {
-    my ($self, $type, $field, $text) = @_;
-    return '' unless $type;
-    return '' if $text eq '%';
-    return "'$type' == NULL" unless defined $text;
-    return "'$type' = \"$text\"" if defined $text;
 }
 
 =item reload ([FORM])
@@ -528,10 +599,10 @@ If invoked in a scalar context, only returns the first item.
 
 sub create {
     my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
-    my $form = $self->get_form ($session, $self->table);
-    return $self->new_from_form ($form, 'table' => $self->table, 
-                                        'db' => $parent);
+    my $parent = $self->parent_or_die (%args);
+    my $form = $self->get_form ($parent->session_or_die, $self->table);
+    return $self->new_from_form ($form, 'table'  => $self->table, 
+                                        'parent' => $parent);
 }
 
 =back
@@ -576,14 +647,15 @@ sub get_form {
 
 sub read {
     my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
+    my $parent = $self->parent_or_die ('need parent to read', 0, %args);
+    my $session = $parent->session_or_die;
+    my $logger  = $parent->logger_or_die;
+
     my $form = $self->get_form ($session, $self->table) || return;
 
     ## Figure out how we're limiting our search
     my $limit = join (" AND ", $self->limit (%args));
     return unless $limit;
-
-    warn "L 1: $limit\n";
 
     my $logger = $parent->config->logger;
 
@@ -597,7 +669,7 @@ sub read {
     foreach my $entry (@entries) {
         $logger->debug (sprintf ("new_from_form (%s)", $self->table));
         push @return, $self->new_from_form ($entry, 
-            'table' => $self->table, 'db' => $parent);
+            'table' => $self->table, 'parent' => $parent);
     }
 
     return wantarray ? @return : $return[0];
@@ -624,7 +696,7 @@ to use B<register ()>!
 
 sub update_old_check {
     my ($self, $new, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
+    my $parent = $self->parent_or_die (%args);
 
     my %update = $self->diff ($new);
     unless (scalar keys %update) { return wantarray ? ($self => {}) : $self }
@@ -710,7 +782,8 @@ passed.
 
 =cut
 
-sub limit  { shift->limit_basic (@_) }
+sub limit_pre  { shift; @_ }
+sub limit_post { shift; @_ }
 
 =item print_text ()
 
@@ -783,8 +856,7 @@ sub pull_formdata {
     my $parent = $self->parent_or_die (%args);
 
     unless ($parent->formdata ($self->table)) {
-        my $form = $self->get_form ($self->session_or_die (%args),
-            $self->table) || return;
+        my $form = $self->get_form ($parent->session_or_die, $self->table) || return;
         my $formdata = $form->get_formdata;
         $parent->formdata ($self->table, $formdata);
     }
@@ -869,11 +941,11 @@ Converts a numeric I<ID> to the human-readable field name, with B<schema ()>.
 
 sub id_to_field { shift->schema->{shift} }
 
-=item parent_or_die (ARGHASH)
+=item parent_or_die (TEXT, COUNT, ARGHASH)
 
 =item session_or_die (ARGHASH)
 
-Takes an arguemnt hash I<ARGHASH> from a parent function.  If the 'db'
+Takes an arguemnt hash I<ARGHASH> from a parent function.  If the 'parent'
 argument is in the argument hash, or if B<parent ()> is set, then return that;
 otherwise, die.
 
@@ -881,38 +953,21 @@ otherwise, die.
 
 =cut
 
-sub parent_or_die {
+sub parent_or_die  { 
     my ($self, %args) = @_;
-    my $count = $args{'count'} || 2;
-    return $args{'db'} if defined $args{'db'};
-    $self->error ('no db connection', $count + 1)
-        unless (ref $self && $self->parent);
-    return $self->parent;
-}
+    return $args{'parent'} if defined $args{'parent'};
 
-sub session_or_die {
-    my ($self, %args) = @_;
-    my $count = $args{'count'} || 2;
-    my $parent = $self->parent_or_die (%args);
-    $self->error ('no session connection', $count + 1)
-        unless (defined $parent && ref $parent && $parent->session);
-    return $parent->session;
-}
+    my $count = $args{'count'} || 0;
+    my $text  = $args{'text'};
 
-sub parent_and_session {
-    my ($self, %args) = @_;
-    $args{'count'} ||= 3;
-    return ($self->parent_or_die (%args), $self->session_or_die (%args));
-}
-
-sub error {
-    my ($self, $text, $count) = @_;
-    $count ||= 1;
-    my $func = (caller ($count))[3];
-    my $func2 = (caller ($count+1))[3];
-    $text = "unknown error" if (! defined $text);
-    chomp $text;
-    die "$func: $text ($func2)\n";
+    if (ref $self) { 
+        return $self->parent if defined $self->parent;
+        $self->_or_die ('parent', "no parent in object", $text, 
+            $count + 1);
+    } else { 
+        return $self->_or_die ('parent', "no 'parent' offered", $text, 
+            $count + 1);
+    }
 }
 
 =back
@@ -923,12 +978,24 @@ sub error {
 ### Internal Subroutines
 ##############################################################################
 
+### _args_trace (TEXT, ARGHASH)
+# [...]
+sub _args_trace {
+    my ($logger, $text, %args) = @_;
+    if ($logger->is_all) { 
+        $logger->all ($text);
+        foreach (keys %args) { $logger->all ("  $_: $args{$_}"); }
+    }
+}
+
+
 ### _init (PARENT, 
 # Creates and initializes a new object, setting its parent and table fields
 # appropriately and going through field_map () to set the key_field entries.
 # Returns the object; failure cases generally lead to death.  
 #
 # Used with new () and new_from_form ().
+
 sub _init {
     my ($class, $parent, $table) = @_;
 
@@ -946,15 +1013,71 @@ sub _init {
     return $obj;
 }
 
-### _load_class (CLASS)
-# evals 'use CLASS', and pumps any errors through error ().  Returns 1 on
-# success.
-sub _load_class {
-    my ($self, $class) = @_;
-    local $@;
-    eval "use $class";
-    $self->error ($@) if $@;
-    return 1;
+### _limit_string (ID, FIELD, VALUE)
+# Like human_to_data (), but creates limit strings and therefore must
+# understand the concept of '+' and '-', as described under limit_basic ().
+# Could probably just stay in limit_basic (), but it's easier to have it split
+# off for now.  
+
+sub _limit_string {
+    my ($self, $id, $field, $value) = @_;
+    return unless $id;
+    return "'$id' == NULL" unless defined $value;
+
+    ## 'enum' fields
+    if ($self->field_is ('enum', $field)) { 
+        my ($mod, $human) = ($value =~ /^([+-]?=?)(.*)$/);
+        my %hash = reverse $self->field_to_values ($field);
+        my $data = $hash{$human};
+        return '1=2' unless defined $data;
+        return _limit_gt ($self, $id, $mod, $data);
+
+    ## 'time' fields 
+    } elsif ($self->field_is ('time', $field)) {
+        my ($mod, $timestamp) = ($value =~ /^([+-]?=?)(.*)$/);
+        my $time = str2time ($timestamp) || return '1=2';
+        return _limit_gt ($self, $id, $mod, $time);
+
+    ## all other field types
+    } else {
+        return if $value eq '%';
+        return "'$id' = \"$value\"" if defined $value;
+    }
+}
+
+### _limit_gt (ID, MOD, TEXT)
+# Escape TEXT first.
+sub _limit_gt {
+    my ($self, $id, $mod, $text) = @_;
+    return "'$id' <= $text" if $mod eq '-=';
+    return "'$id' >= $text" if $mod eq '+=';
+    return "'$id' < $text"  if $mod eq '-';
+    return "'$id' > $text"  if $mod eq '+';
+    return "'$id' = $text";
+}
+
+### _or_die (TYPE, ERROR, EXTRATEXT, COUNT)
+# Helper function for Class::Struct accessors.  If the value is not defined -
+# that is, it wasn't set - then we will immediately die with an error message
+# based on a the calling function (can go back extra levels by offering
+# COUNT), a generic error message ERROR, and a developer-provided, optional
+# error message EXTRATEXT.  
+sub _or_die {
+    my ($self, $type, $error, $extra, $count) = @_;
+    # return $self->$type if defined $self->$type;
+    $count ||= 0;
+
+    my $func = (caller ($count + 2))[3];    # default two levels back
+
+    chomp ($extra);
+    my $fulltext = sprintf ("%s: %s", $func, $extra ? "$error ($extra)"
+                                                    : $error);
+    die "$fulltext\n";
+}
+
+sub _plural {
+    my ($count, $singular, $plural) = @_;
+    sprintf ("%d %s", $count, $count == 1 ? $singular : $plural);
 }
 
 ##############################################################################

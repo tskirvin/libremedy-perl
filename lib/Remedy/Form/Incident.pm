@@ -125,14 +125,14 @@ B<Remedy::TicketGen ().
 
 sub get_incnum {
     my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
+    my $parent = $self->parent_or_die ();
 
     return $self->inc_num if defined $self->inc_num;
     if (! $self->ticketgen) {
-        my %args = ('db' => $parent);
+        my %args;
 
-        my $ticketgen = Remedy::Form::TicketGen->new (%args) or $self->error 
-            ("couldn't create new ticket number: " .  $session->error );
+        my $ticketgen = $parent->create ('Remedy::Form::TicketGen') 
+            or $self->error ("couldn't create new ticket number");
         $ticketgen->description ($args{'description'} || $self->default_desc);
         $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
 
@@ -346,8 +346,7 @@ $TEXT{'worklog'} = \&text_worklog;
 sub audit {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    return Remedy::Audit->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->id, %args);
+    return $self->read ('Remedy::Audit', 'EID' => $self->inc_num, %args);
 }
 
 =item worklog ()
@@ -357,8 +356,7 @@ sub audit {
 sub worklog {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    return Remedy::WorkLog->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->inc_num, %args);
+    return $self->read ('Remedy::WorkLog', 'EID' => $self->inc_num, %args);
 }
 
 =item timelog ()
@@ -368,8 +366,7 @@ sub worklog {
 sub timelog {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    return Remedy::Time->read ('db' => $self->parent_or_die (%args),
-        'EID' => $self->inc_num, %args);
+    return $self->read ('Remedy::Time', 'EID' => $self->inc_num, %args);
 }
 
 =item worklog_create ()
@@ -441,6 +438,92 @@ sub field_map {
     'total_time_spent'      => "Total Time Spent (min)",
     'date_resolution'       => "Estimated Resolution Date",
 }
+
+=item limit_pre ()
+
+extra is above
+
+=cut
+
+sub limit_pre {
+    my ($self, %args) = @_;
+    my $parent = $self->parent_or_die ();
+    my $config = $parent->config_or_die ('no configuration');
+
+    if (my $incnum = $args{'incnum'}) { return ('Incident Number' => $incnum) }
+
+    $args{'Assigned Support Company'}      ||= $config->company   || "%";
+    $args{'Assigned Support Organization'} ||= $config->sub_org   || "%";
+    $args{'Assigned Group'}                ||= $config->workgroup || "%";
+
+    my %fields = $self->fields (%args);
+
+    my @extra;
+
+    if (my $extra = $args{'extra'}) { 
+        @extra = ref $extra ? @$extra : $extra;
+        delete $args{'extra'};
+    }
+
+    if (my $groups = $args{'groups'}) {
+        if (my $id = $fields{'Assigned Group'}) {
+            my @list;
+            foreach (ref $groups ? @$groups : $groups) { 
+                my $name = $_->name;
+                push @list, "'$id' = \"$name\"";
+            }
+            push @extra, ('(' . join (" OR ", @list) . ')')
+                if scalar @list;
+        }
+    }
+
+    # Don't forget 'Incident Type' and a simple "only give me tasks" option
+
+#('Assigned Group*+' = "ITS Unix Systems" OR 'Assigned Group*+' = [...])
+#AND ('Status*' = "Assigned" OR 'Status*' OR [...]) 
+#AND ('Last Modified Date' <= $DATE$  (5*60*24*60)) AND ('Incident Type*' = "Request")
+
+    if (my $status = lc $args{'status'}) { 
+        if (my $margin = $self->human_to_data ('Status', 'Resolved')) {
+            if    ($status eq 'open')   { $args{'Status'} = "-$margin"      }
+            elsif ($status eq 'closed') { $args{'Status'} = "+=$margin"     }
+            else                        { $args{'Status'} = $args{'status'} }
+        }
+        delete $args{'status'};
+    } 
+
+    if (my $user_assign = $args{'assigned_user'}) { 
+        $args{'Assignee Login ID'} = $user_assign;
+        delete $args{'assigned_user'};
+    } else { 
+        $args{'Assignee Login ID'} = $config->username || '%';
+    }
+
+    if (my $user_submit = $args{'submitted_user'}) { 
+        $args{'SUNet ID+'} = $user_submit;
+        delete $args{'submitted_user'};
+    }
+
+    if ($args{'unassigned'}) { 
+        $args{'Assignee Login ID'} = undef;
+        delete $args{'unassigned'};
+    }
+
+    if (my $modify = $args{'last_modify_before'}) { 
+        $args{'Last Modified Date'} = "-$modify";
+        delete $args{'last_modify_before'};
+    }
+
+    if (my $create = $args{'submit_before'}) { 
+        $args{'Submit Date'} = "-$create";
+        delete $args{'submit_before'};
+    }
+
+    if (scalar @extra) { $args{'extra'} ||= [@extra] }
+
+    return %args;
+}
+
 
 =item print_text ()
 

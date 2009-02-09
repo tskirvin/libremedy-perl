@@ -72,9 +72,8 @@ sub group {
 
 sub sga {
     my ($self, @rest) = @_;
-    return unless $self->id;
-    return Remedy::Form::SGA->read ('db' => $self->parent_or_die (@rest),
-        'Person ID' => $self->id, @rest);
+    return unless my $id = $self->id;
+    return $self->read ('Remedy::Form::SGA', 'ID' => $id, @rest);
 }
 
 =head2 B<Remedy::Form Overrides>

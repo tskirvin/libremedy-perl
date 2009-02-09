@@ -98,9 +98,8 @@ sub field_map {
 
 sub group {
     my ($self, @rest) = @_;
-    return unless $self->group_id;
-    return Remedy::Form::SupportGroup->read (
-        'db' => $self->parent_or_die (@rest), 'ID' => $self->group_id, @rest);
+    return unless my $id = $self->group_id;
+    return $self->read ('Remedy::Form::SupportGroup', 'ID' => $id, @rest);
 }
 
 =item person ()
@@ -109,9 +108,8 @@ sub group {
 
 sub person {
     my ($self, @rest) = @_;
-    return unless $self->group_id;
-    return Remedy::Form::People->read ('db' => $self->parent_or_die (@rest),
-        'ID' => $self->person_id, @rest);
+    return unless my $id = $self->person_id;
+    return $self->read ('Remedy::Form::People', 'ID' => $id, @rest);
 }
 
 =back

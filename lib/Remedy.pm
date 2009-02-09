@@ -39,7 +39,7 @@ use Remedy::Session;
 
 struct 'Remedy' => {
     'config'     => 'Remedy::Config',
-    'debug '     => '$',
+    'error'      => '$',
     'logger'     => 'Log::Log4perl::Logger',
     'formdata'   => '%',
     'session'    => 'Remedy::Session',
@@ -50,24 +50,6 @@ struct 'Remedy' => {
 ##############################################################################
 
 =head1 FUNCTIONS
-
-=head2 Class::Struct Methods
-
-=over 4
-
-=item new ()
-
-=item config (B<Remedy::Config>)
-
-=item debug ($)
-
-=item logger (B<Remedy::Log>)
-
-=item formdata (%)
-
-=item session (B<Remedy::Session>)
-
-=back
 
 =head2 Construction
 
@@ -93,13 +75,6 @@ sub connect {
     # Get the logger
     my $logger = $self->config->logger;
     $self->logger ($logger);
-
-    $logger->debug ('1 debug');
-    $logger->info  ('1 info');
-    $logger->warn  ('1 warn');
-    $logger->error ('1 error');
-    $logger->fatal ('1 fatal');
-
 
     # Gather basic information from the configuration file; there's more to 
     # be had, but this is a good start.
@@ -139,7 +114,7 @@ offered by the local forms.  See B<Remedy::Form::form ()> for more details.
 
 sub form {
     my ($self, $form_name) = @_;
-    return Remedy::Form->form ($form_name, 'db' => $self);
+    return Remedy::Form->form ($form_name, 'parent' => $self);
 }
 
 =back
@@ -162,7 +137,7 @@ may not actually be what I want
 
 sub create { 
     my ($self, $form_name, @args) = @_;
-    return $self->_doit ('create', 1, @_) 
+    # return $self->_doit ('create', 1, @_) 
 }
 
 =item read (FORM_NAME, ARGS)
@@ -211,7 +186,6 @@ sub delete {
     return $count;
 }
 
-
 =item registered_classes ()
 
 Lists the classes currently registred with B<Remedy::Form>.  Informational
@@ -226,50 +200,71 @@ sub registered_classes { Remedy::Form->registered }
 =cut
 
 ##############################################################################
-### Errors and Debugging #####################################################
+### Class::Struct Methods ####################################################
 ##############################################################################
 
-=head2 Errors and Debugging
+=head2 Class::Struct Methods
+
+=head3 Regular Accessors
 
 =over 4
 
-=item warn_level (LEVEL, TEXT)
+=item new ()
 
-Iff I<LEVEL> is at least the value of I<debug> is set, writes a debugging
-message C<TEXT> with the current package name to STDERR.
+=item config (B<Remedy::Config>)
+
+=item logger (B<Remedy::Log>)
+
+=item formdata (%)
+
+=item session (B<Remedy::Session>)
+
+=back
+
+=head3 Additional Accessors
+
+=over 4
+
+=item config_or_die (TEXT)
+
+Returns the current [...]
+
+=item logger_or_die (TEXT)
+
+=item session_or_die (TEXT)
+
+=back
 
 =cut
 
-sub warn_level {
-    my ($self, $level, @text) = @_;
-    @text = grep { $_ if defined $_ } @text;       # so we can ignore undef
-    if (scalar @text && ($level <= 0 || $self->config->debug >= $level)) {
-        my $text = join ("\n", @text);
-        chomp $text;
-        warn __PACKAGE__, ": $text\n";
-    }
-    return;
-}
-
-=item error (TEXT)
-
-Exits with an error message I<TEXT>.  Should be eliminated.
-
-=cut
-
-sub logdie {
-    my ($self, $logger, @error) = @_;
-    $logger->fatal (@error);
-    my $error = "$@";  
-    chomp $error;
-    die "$error\n";
-}
+sub config_or_die  { shift->_or_die ('config',  "no configuration", @_) }
+sub logger_or_die  { shift->_or_die ('logger',  "no logger",        @_) }
+sub session_or_die { shift->_or_die ('session', "no session",       @_) }
 
 ###############################################################################
 ### Internal Subroutines ######################################################
 ###############################################################################
 
 sub DESTROY { if (my $session = shift->session) { $session->disconnect } }
+
+### _or_die (TYPE, ERROR, EXTRATEXT, COUNT)
+# Helper function for Class::Struct accessors.  If the value is not defined -
+# that is, it wasn't set - then we will immediately die with an error message
+# based on a the calling function (can go back extra levels by offering
+# COUNT), a generic error message ERROR, and a developer-provided, optional
+# error message EXTRATEXT.  
+sub _or_die {
+    my ($self, $type, $error, $extra, $count) = @_;
+    return $self->$type if defined $self->$type;
+    $count ||= 0;
+
+    my $func = (caller ($count + 2))[3];    # default two levels back
+
+    chomp ($extra);
+    my $fulltext = sprintf ("%s: %s", $func, $extra ? "$error ($extra)"
+                                                    : $error);
+    die "$fulltext\n";
+}
 
 ###############################################################################
 ### Final Documentation #######################################################

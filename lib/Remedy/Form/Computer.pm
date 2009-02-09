@@ -122,9 +122,8 @@ Defaults to B<limit_basic ()>.
 
 =cut
 
-sub limit {
+sub limit_extra {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
 
     if (my $incnum = $args{'IncNum'}) { 
         my $id = $self->field_to_id ("Incident Number");

@@ -11,8 +11,7 @@ Remedy::Audit - per-ticket worklogs
     use Remedy::Audit;
 
     # $remedy is a Remedy object
-    my @audit = Remedy::Audit->read ('db' => $remedy, 
-        'ID' => 'INC000000002371');
+    my @audit = $remedy->read ('EID' => 'INC000000002371');
     for my $item (@audit) { print scalar $item->print_text }
 
 =head1 DESCRIPTION

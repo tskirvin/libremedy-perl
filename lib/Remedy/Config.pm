@@ -98,17 +98,16 @@ accessors.
 
 our ($REMEDY_HOST, $REMEDY_PORT, $REMEDY_USER, $REMEDY_PASS);
 
-=item $COMPANY, $SUB_ORG, $WORKGROUP, $USERNAME
+=item $COMPANY, $SUB_ORG, $WORKGROUP
 
 The name of the company and its sub-organization that we will be working with
-in Remedy - ie, "Stanford University", "IT Services", "ITS Unix Services", "Tim
-Skirvin".  
+in Remedy - ie, "Stanford University", "IT Services", "ITS Unix Services"
 
-Matches the B<company>, B<sub_org>, B<workgroup>, and B<username> accessors.
+Matches the B<company>, B<sub_org>, and B<workgroup> accessors.
 
 =cut
 
-our ($COMPANY, $SUB_ORG, $WORKGROUP, $USERNAME);
+our ($COMPANY, $SUB_ORG, $WORKGROUP);
 
 =item $DOMAIN
 
@@ -255,7 +254,6 @@ sub _init_options {
     $self->remedy_port   ($REMEDY_PORT);
     $self->remedy_user   ($REMEDY_USER);
     $self->sub_org       ($SUB_ORG);
-    $self->username      ($USERNAME);
     $self->workgroup     ($WORKGROUP);
     $self->wrap          ($TEXT_WRAP);
     $self;

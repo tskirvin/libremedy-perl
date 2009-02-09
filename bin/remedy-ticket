@@ -8,7 +8,7 @@
 ## Modify and uncomment this to use user code instead of just system-wide
 ## modules, or to use development versions.
 # use lib '/FULL/PATH/TO/PERL/MODULES';
-use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib";   # not ideal
+# use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib";   # not ideal
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
 ## Shared configuration file.  Set with '--config'
@@ -64,6 +64,9 @@ use vars qw/$USER $GROUP/;
 ### main ()
 ##############################################################################
 
+my $logger = get_logger ('');
+$logger->all ('if this shows anywhere, we have a problem');
+
 my $parser = new Getopt::Long::Parser;
 my $result = $parser->getoptions (
     'c|config=s'    => \$CONFIG,
@@ -77,60 +80,20 @@ my $result = $parser->getoptions (
     'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
 map { untaint ($_) } $CONFIG, $TIME, $DAYS, $USER, $GROUP, $STATUS;
 
-# my $logger = get_logger ('screen');
-# my $logger = get_logger ('Remedy');
-my $logger = get_logger ("$0-screen");
-$logger->fatal ("testing lala");
-
-
-warn "L: $logger\n";
-# print Dumper ($logger);
-
-$logger->debug ('0 should not see this debug');
-$logger->info  ('0 should not see this info');
-$logger->warn  ('0 should not see this warn');
-$logger->error ('0 should not see this error');
-$logger->fatal ('0 should not see this fatal');
-
 my $remedy = Remedy::Ticket->connect ($CONFIG)
     or $logger->logdie ("couldn't connect to database: $@");
 $logger->logdie ($@) if $@;
 
-$logger = get_logger ("$0-screen");
-
 if ($DEBUG_LEVEL) {
-    # Log::Log4perl->appender_thresholds_adjust ($DEBUG_LEVEL);
     $logger->more_logging ($DEBUG_LEVEL) if $DEBUG_LEVEL >= 1;
 }
-
-# $logger = $remedy->logger;
-# print Dumper ($logger);
-
-$logger->debug ('3 should not see this debug');
-$logger->info  ('3 should not see this info');
-$logger->warn  ('3 should not see this warn');
-$logger->error ('3 should not see this error');
-$logger->fatal ('3 should not see this fatal');
-
-
-$logger->fatal ("testing lala 3");
-
-$logger->logdie ('testing');
-
-#if ($remedy->logger) { 
-#    $logger = $remedy->logger;
-#    if ($DEBUG_LEVEL) { 
-#        $logger->more_logging ($DEBUG_LEVEL);
-#    }
-#}
 
 my ($query, @rest) = @ARGV;
 $query ||= '(none)';
 
-
 if (lc $query eq 'ticket') { 
     my ($inc, $type, @args) = @rest;
-    my $tkt = get_ticket ($remedy, $inc) || error ("no ticket");
+    my $tkt = get_ticket ($remedy, $inc) or $logger->logdie ('no ticket');
 
     $type ||= '';
     my @list = qw/primary requestor assignee description resolution worklog/;
@@ -148,38 +111,47 @@ if (lc $query eq 'ticket') {
 
 
 
-
-
 } elsif (lc $query eq 'list') { 
     my ($type, $user, @extra) = @rest;
+    $type ||= 'assign';
+    $type = lc $type;
 
-    my %hash;
+    my (%hash, @text);
+
+    $user ||= $USER || $DEFAULT_USER;
+
     $hash{'user'}   = $USER   if defined $USER;
     $hash{'group'}  = $GROUP  if defined $GROUP;
     $hash{'status'} = $STATUS if defined $STATUS;
 
-    $user ||= $USER || $DEFAULT_USER;
-
-    my @text;
-    $type ||= 'assign';
-    $logger->info ("finding tickets of type '$type'");
-    if (lc $type eq 'unresolved') { 
-        $hash{'status'} = 'open';
-        push @text, "open tickets";
+    if      ($type eq 'all') {
         
-    } elsif (lc $type eq 'unassigned') { 
+    } elsif ($type eq 'assign') {
+        $hash{'assigned_user'} = $user;
+        push @text, "assigned to '$user'";
+        $user = '';
+
+    } elsif ($type eq 'submit') {
+        $hash{'submitted_user'} = $user;
+        $user = '';
+        push @text, "submitted by '$user'";
+
+    } elsif ($type eq 'unassigned') { 
         $hash{'unassigned'}++;
         push @text, "unassigned tickets";
         
-    } elsif (lc $type eq 'assign') {
-        $hash{'user_assign'} = $user;
-        $user = '';
+        if ($user) {
+            $hash{'submitted_user'} = $user;
+            $user = '';
+            push @text, "submitted by '$user'";
+        }
 
-    } elsif (lc $type eq 'submit') {
-        $hash{'user_submit'} = $USER || $DEFAULT_USER;
-        $user = '';
+    } elsif ($type eq 'unresolved') { 
+        $hash{'status'} = 'open';
+        push @text, "open tickets";
 
     } else { error_usage ("invalid list type: '$type'") }
+
 
     if ($DAYS) {
         $hash{'last_modify_before'} = time - $DAYS * 86400;
@@ -198,10 +170,9 @@ if (lc $query eq 'ticket') {
             push @text, "in all member groups of '$user'";
             $hash{'groups'} = \@groups;
         }
-        warn "G: @groups\n";
     }
 
-    $logger->info ("finding tickets where %s", join (", ", @text));
+    $logger->info (sprintf ("finding tickets where %s", join (", ", @text)));
     foreach my $tkt ($remedy->read ('ticket', %hash)) { 
         print scalar $tkt->summary_text;
     }
@@ -292,59 +263,30 @@ exit 0;
 ### Subroutines 
 ##############################################################################
 
-sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
 sub error_usage { 
     my ($error) = @_;
-    pod2usage (-exit_status => 2, -verbose => 1, -message => $error) 
+    my $logger = get_logger ('');
+    $logger->error ($error);
+    pod2usage (-exit_status => 2, -verbose => 1);
 }
 
 sub get_ticket {
     my ($remedy, $inc) = @_;
-    my $incnum = $remedy->parse_incident_number ($inc)
-        or pod2usage (-verbose => 1, "Invalid ticket number: $inc");
-    # debug ("Getting information about ticket $incnum");
-    my $tkt = $remedy->ticket ($incnum)
-        or $remedy->die_error ("Couldn't load $incnum", $remedy->error);
+    my $logger = $remedy->logger_or_die ('no logger when getting ticket');
+    $logger->info ("getting ticket '$inc'");
+    my $tkt = eval { $remedy->get_ticket ($inc) };
+    $logger->logdie ("error loading '$inc': $@") if $@ || !$tkt;
     return $tkt;
-}
-
-### _parse_params (TICKET, TYPE)
-# Pulls the ticket and printing parameters from the command-line.
-
-sub _parse_params {
-    shift @_ if $ENV{'REMOTE_USER'};    # support for remctl use
-    my ($incnum, $type) = @_;
-    $type ||= "base";
-    pod2usage (-verbose => 1) unless ($incnum && $type);
-
-    $type = lc $type;
-    pod2usage (-verbose => 1) if $incnum =~ /^(base|full|all|help)$/i;
-
-    # Standardize the ticket name
-    unless (($incnum =~ /^(INC|TAS)/) && (length ($incnum) == 15)) {
-        my $prefix = $1;
-        if ($incnum =~ /^HD\d+/) {
-            $incnum =~ s/^HD0//;
-            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
-        } elsif ($incnum =~ /^$prefix\d+/) {
-            $incnum =~ s/^$prefix//;
-            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
-        } elsif ($incnum =~ /^\d+$/) {
-            $incnum = $prefix . ('0' x (12 - length ($incnum))) . $incnum;
-        }
-    }
-
-    ($incnum, $type);
 }
 
 ### untaint (TEXT, MATCH)
 # Untaint user-offered data that is "safe enough", or die if it's not.
 sub untaint {
     my ($text, $match) = @_;
-    $match ||= '[a-zA-Z0-9_./: -]*';
+    $match ||= '[a-zA-Z0-9_./: \-+=]*';
     return '' unless defined $text;
     if ($text =~ m%^($match)$%) { return $1 } 
-    else                        { error ("tainted data: '$text' ($match)") }
+    else                        { die ("tainted data: '$text' ($match)\n") }
 }
 
 ##############################################################################

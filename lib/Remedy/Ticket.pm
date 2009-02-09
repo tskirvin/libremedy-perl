@@ -38,7 +38,7 @@ impact, etc of the ticket; but there are a few other places for customization.
 our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 
 our %FORM = (
-    'all'      => ['Remedy::Form::Incident', 'Remedy::Form::Task'],
+    'all'      => ['Remedy::Form::Task', 'Remedy::Form::Incident'],
     'incident' => 'Remedy::Form::Incident',
     'task'     => 'Remedy::Form::Task',
 );
@@ -85,34 +85,31 @@ Remedy::Form->register ('ticket', $FORM{'all'});
 
 =cut
 
-sub forms { 
-    my ($self, $check) = @_;
-    $check ||= 'all';
-    my $return = $FORM{lc $check};
-    return unless defined $return;
-    return ref $return ? @$return : ($return);
-}
+#sub forms { 
+#    my ($self, $check) = @_;
+#    $check ||= 'all';
+#    my $return = $FORM{lc $check};
+#    return unless defined $return;
+#    return ref $return ? @$return : ($return);
+#}
 
-sub read_old   {
-    warn "R: @_\n";
-    my ($self, $form_name, @args) = @_;
+sub get_ticket {
+    my ($self, $number) = @_;
+    my $logger  = $self->logger_or_die;
+    my $session = $self->session_or_die;
 
-    my @types = $self->forms ($form_name);
-    return "no such search type: '$form_name'" unless scalar @types;
-        
-    my @return;
-    foreach my $type (@types) {
-        warn "T: $type\n";
-        my $form = $self->form ($type) || return;
-        push @return, $form->read (@args);
-    }
-    @return;
-}
+    $logger->all ("parse_incident_number ($number)");
+    my $incnum = $self->parse_incident_number ($number)
+        or pod2usage (-verbose => 1, "Invalid ticket number: $number");
+    
+    $logger->debug ("pulling data about '$incnum'");
+    my @tkt = $self->read ('ticket', 'incnum' => $incnum)
+        or $logger->logdie ("couldn't load $incnum");
+    $logger->debug (sprintf ("%d entries", scalar @tkt));
 
-sub form {
-    my ($self, $form_name) = @_;
-    Remedy::Form->form ($form_name, 'db' => $self);
-}
+    return unless scalar @tkt;
+    return wantarray ? @tkt : $tkt[0];
+}   
 
 
 sub close {
@@ -482,30 +479,6 @@ sub print_text {
         my $text = scalar $self->$func;
         push @return, $text if defined $text;
     }
-
-    return wantarray ? @return : join ("\n", @return, '');
-}
-
-sub summary_text {
-    my ($self) = @_;
-
-    my $inc_num = $self->inc_num;
-       $inc_num =~ s/^INC0+//;
-    my $request = $self->sunet || 'NO_SUNETID';
-       $request =~ s/NO_SUNETID|^\s*$/(none)/g;
-    my $assign  = $self->assignee_sunet || "(none)";
-    my $group   = $self->assignee_group || "(none)";
-    my $summary = $self->summary || "";
-    map { s/\s+$// } $summary, $group, $assign, $request;
-
-    my $update = $self->date_modified;
-    my $create = $self->date_submit;
-
-    my @return;
-    push @return, sprintf ("%-8s   %-8s   %-8s   %-32s  %12s", 
-        $inc_num, $request, $assign, $group, $self->status || '(not set)');
-    push @return, sprintf ("  Created: %s   Updated: %s", $create, $update);
-    push @return, sprintf ("  Summary: %s", $summary);
 
     return wantarray ? @return : join ("\n", @return, '');
 }
