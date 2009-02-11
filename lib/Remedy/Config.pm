@@ -53,6 +53,7 @@ use strict;
 use warnings;
 
 use Class::Struct;
+use Log::Log4perl;
 use Remedy::Log;
 
 my %options = (
@@ -136,7 +137,8 @@ our $CONFIG = '/etc/remedy/config';
 =item $DEBUG_LEVEL
 
 Defines how much debugging information to print on user interaction.  Set to
-a string, defaults to 'ERROR'.  See B<Remedy::Log> for more details.
+a string, defaults to I<$Log::Log4perl::ERROR>.  See B<Remedy::Log> for more
+details.
 
 =cut
 
@@ -153,7 +155,8 @@ our $LOGFILE = "";
 =item $LOGFILE_LEVEL
 
 Like $DEBUG_LEVEL, but defines the level of log messages we'll print to
-I<$LOGFILE>.  Defaults to 3.
+I<$LOGFILE>.  Defaults to I<$Log::Log4perl::INFO>.  See B<Remedy::Log> for more
+details.
 
 =cut
 

@@ -34,11 +34,11 @@ use Date::Parse;
 use Exporter;
 use Remedy::Form::Generic;  
 use Remedy::Form::Utility;
-use Stanford::Remedy::Form;
+use Remedy::Session::Form;
 
 our @EXPORT    = qw//;
 our @EXPORT_OK = qw/init_struct/;
-our @ISA       = qw/Exporter Remedy::Form::Utility/;
+our @ISA       = qw/Remedy::Form::Utility Exporter/;
 
 ## Registered table names - why yes, it's global
 use vars qw/%REGISTER/;
@@ -75,7 +75,7 @@ Manages the parent B<Remedy> object, which contains configuration information,
 the actual database connection, and so forth.  Set with B<init ()>.  Most
 functions require an active database connection.
 
-=item remedy_form (B<Stanford::Remedy::Form>)
+=item remedy_form (B<Remedy::Session::Form>)
 
 Manages the object used to get/set database values.  Set with B<new ()> or
 B<new_from_form ()>.
@@ -127,7 +127,7 @@ sub init_struct {
     my %fields;
     my %map = $class->field_map;
     foreach (keys %map) { $fields{$_} = '$' }
-    struct $new => {'remedy_form' => 'Stanford::Remedy::Form',
+    struct $new => {'remedy_form' => 'Remedy::Session::Form',
                     'parent'      => 'Remedy',
                     'table'       => '$',
                     'key_field'   => '%', %extra, %fields};
@@ -263,6 +263,26 @@ sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
 =head2 Accessors
 
 =over 4
+
+=item related_by_id (TABLE, ID, ARGHASH)
+
+=cut
+
+sub related_by_id {
+    my ($self, $table, $field, $id, %args) = @_;
+    my $parent = $self->parent_or_die;
+    my $logger = $parent->logger_or_die;
+    unless ($table) {
+        $logger->debug ('relate_by_id - no table offered');
+        return;
+    }
+    unless ($id) {
+        $logger->debug ('relate_by_id - no ID offered');
+        return;
+    }
+    $logger->debug (sprintf ("read (%s, %s => %s)", $table, $field, $id));
+    return $parent->read ($table, $field => $id, %args);
+}
 
 =item get (FIELD)
 
@@ -620,7 +640,7 @@ sub create {
 =item get_form (SESSION, TABLE_NAME)
 
 Given a working B<Remedy::Session> and the table name I<TABLE_NAME>, safely
-creates a B<Stanford::Remedy::Form> object safely - meaning that warnings are
+creates a B<Remedy::Session::Form> object safely - meaning that warnings are
 turned off temporarily and the whole block is run as an 'eval'.  Returns the
 object on success, or undef on failure; if there is an error message, it is
 returned as '$@'.
@@ -634,7 +654,7 @@ sub get_form {
     my ($self, $session, $table) = @_;
     return unless (defined $session && defined $table);
     no warnings;
-    my $form = eval { Stanford::Remedy::Form->new ('session' => $session,
+    my $form = eval { Remedy::Session::Form->new ('session' => $session,
         'name' => $table) };
     if ($@) { return }
     return $form;
@@ -651,7 +671,10 @@ sub read {
     my $session = $parent->session_or_die;
     my $logger  = $parent->logger_or_die;
 
-    my $form = $self->get_form ($session, $self->table) || return;
+    my $table = $self->table || return;
+
+    $logger->all ("get_form ($session, $table)");
+    my $form = $self->get_form ($session, $table) || return;
 
     ## Figure out how we're limiting our search
     my $limit = join (" AND ", $self->limit (%args));
@@ -660,14 +683,14 @@ sub read {
     my $logger = $parent->config->logger;
 
     ## Perform the search
-    $logger->debug (sprintf ("read_where (%s, %s)", $self->table, $limit));
+    $logger->debug ("read_where ($table, $limit)");
     my @entries = $form->read_where ($limit);
     $logger->debug (sprintf ("%d entr%s returned", scalar @entries, 
         scalar @entries == 1 ? 'y' : 'ies'));
 
     my @return;
     foreach my $entry (@entries) {
-        $logger->debug (sprintf ("new_from_form (%s)", $self->table));
+        $logger->debug (sprintf ("new_from_form (%s)", $table));
         push @return, $self->new_from_form ($entry, 
             'table' => $self->table, 'parent' => $parent);
     }
@@ -785,17 +808,17 @@ passed.
 sub limit_pre  { shift; @_ }
 sub limit_post { shift; @_ }
 
-=item print_text ()
+=item print ()
 
 Creates a printable string summarizing information about the object.  Based
 on invocation type, returns either an array of lines that you can print, or a
 single newline-delimited string.
 
-Defaults to use B<debug_text ()>.
+Defaults to use B<debug_pretty ()>.
 
 =cut
 
-sub print_text { shift->debug_text (@_) }
+sub print { shift->debug_pretty (@_) }
 
 =item schema ()
 
@@ -1086,11 +1109,11 @@ sub _plural {
 
 =head1 REQUIREMENTS
 
-B<Remedy::Form::Utility>
+B<Remedy::Form::Utility>, B<Remedy::Session::Form>
 
 =head1 SEE ALSO
 
-Remedy::Ticket(8), Stanford::Remedy(8)
+Remedy::Ticket(8)
 
 =head1 AUTHOR
 

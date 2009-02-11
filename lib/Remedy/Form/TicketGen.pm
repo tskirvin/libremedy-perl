@@ -1,15 +1,14 @@
 package Remedy::Form::TicketGen;
 our $VERSION = "0.12";
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::TicketGen - ticket-generation table
+Remedy::Form::TicketGen - ticket-generation table
 
 =head1 SYNOPSIS
 
-    use Remedy::TicketGen;
+    use Remedy::Form::TicketGen;
 
     my $inc_num = Remedy::TicketGen[...]
 
@@ -45,6 +44,7 @@ use warnings;
 use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
+Remedy::Form->register ('ticketgen', __PACKAGE__);
 
 ##############################################################################
 ### Class::Struct
@@ -87,16 +87,9 @@ sub field_map {
     'description' => "Short Description",
 }
 
-=item name ()
-
-=cut
-
-sub name {
-    my ($self, %args) = @_;
-    return $self->inc_num;
-}
-
 =item table ()
+
+F<HPD:CFG Ticket Num Generator>
 
 =cut
 

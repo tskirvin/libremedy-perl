@@ -73,7 +73,39 @@ These
 =cut
 
 sub field_map { 
-    # 'netid'     => "Login Name",
+    'number'                => 'Task ID',
+
+    'assignee'              => 'Assignee',
+    'assignee_group'        => 'Assignee Group',
+    'assignee_netid'        => 'Assigned To',
+    'date_modified'         => "Modified Date",
+    'netid'                 => 'Submitter',
+    'requestor_first_name'  => "First Name",
+    'requestor_last_name'   => "Last Name",
+
+}
+
+sub limit_pre {
+    my ($self, %args) = @_;
+    my $parent = $self->parent_or_die ();
+    my $config = $parent->config_or_die ('no configuration');
+
+    if (my $type = $args{'type'}) { 
+        return unless $type =~ /^(task|all|%)$/i;
+        delete $args{'type'};
+    }
+    
+    if (my $number = $args{'number'}) { return ('Task ID' => $number) }
+
+    my @extra;
+    if (my $extra = $args{'extra'}) { 
+        @extra = ref $extra ? @$extra : $extra;
+        delete $args{'extra'};
+    }
+    
+    if (scalar @extra) { $args{'extra'} ||= [@extra] }
+
+    return %args;
 }
 
 sub limit_status { }

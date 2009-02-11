@@ -59,7 +59,8 @@ struct 'Remedy' => {
 
 Connects to the Remedy server, and creates a B<Remedy::Session> object.
 
-I<CONF> is a B<Remedy::Config> object, which contains details of how we will connect.
+I<CONFIG> is either a B<Remedy::Config> object or a filename which we will load
+to create a new B<Remedy::Config> object.  
 
 =cut
 
@@ -67,17 +68,17 @@ sub connect {
     my ($class, $config, %args) = @_;
     my $self = $class->new ();
 
-    # Load and store configuration information
+    ## Load and store configuration information
     my $conf = ($config && ref $config) ? $config 
                                         : Remedy::Config->load ($config);
     $self->config ($conf);
 
-    # Get the logger
+    ## Get and save the logger
     my $logger = $self->config->logger;
     $self->logger ($logger);
 
-    # Gather basic information from the configuration file; there's more to 
-    # be had, but this is a good start.
+    ## Gather basic information from the configuration file; there's more to 
+    ## be had, but this is a good start.
     my $host = $conf->remedy_host or die "\$REMEDY_HOST not set\n";
     my $user = $conf->remedy_user or die "\$REMEDY_USER not set\n";
 
@@ -88,17 +89,24 @@ sub connect {
         'username' => $user
     );
 
-    $logger->debug ("creating remedy session to $host as $user");
-    my $session = Remedy::Session->new (%opts) 
-        or $logger->logdie ("couldn't create object: $@");
-    $self->session ($session);
+    ## Create and save the Remedy::Session object
+    { 
+        local $@;
+        $logger->debug ("creating remedy session to $host as $user");
+        my $session = eval { Remedy::Session->new (%opts) } 
+            or $logger->logdie ("couldn't create object: $@");
+        $self->session ($session);
+    }
 
-    local $@;
-    $logger->debug ("connecting to remedy server");
-    my $ctrl = eval { $session->connect () };
-    unless ($ctrl) { 
-        $@ =~ s/ at .*$//;
-        $logger->logdie ("error on connect: $@");
+    ## Actually connect to the Remedy server
+    { 
+        local $@;
+        $logger->debug ("connecting to remedy server");
+        my $ctrl = eval { $self->session->connect () };
+        unless ($ctrl) { 
+            $@ =~ s/ at .*$//;
+            $logger->logdie ("error on connect: $@");
+        }
     }
 
     return $self;
@@ -106,7 +114,7 @@ sub connect {
 
 =item form (TABLE)
 
-Returns the B<Remedy::Form> object corresponding to the table name I<TABLE>,
+Returns the B<Remedy::Form> object(s) corresponding to the table name I<TABLE>,
 which can either be an internal Remedy table name, or a registered shortname
 offered by the local forms.  See B<Remedy::Form::form ()> for more details.
 
@@ -114,6 +122,7 @@ offered by the local forms.  See B<Remedy::Form::form ()> for more details.
 
 sub form {
     my ($self, $form_name) = @_;
+    $self->logger_or_die->all ("form ($form_name)");
     return Remedy::Form->form ($form_name, 'parent' => $self);
 }
 
@@ -127,6 +136,8 @@ sub form {
 
 =head2 CRUD
 
+Create, Read, Update, and Delete tables
+
 =over 4
 
 =item create (FORM_NAME)
@@ -137,19 +148,24 @@ may not actually be what I want
 
 sub create { 
     my ($self, $form_name, @args) = @_;
+    $self->logger_or_die->all ("create ($form_name)");
+    return $self->form ($form_name, @args);
     # return $self->_doit ('create', 1, @_) 
 }
 
-=item read (FORM_NAME, ARGS)
+=item read (FORM_NAME, ARGHASH)
+
+Given the form I<FORM_NAME>, returns an appropriate 
 
 =cut
 
 sub read { 
-    my ($self, $form_name, @args) = @_;
+    my ($self, $form_name, %args) = @_;
 
     my @return;
     foreach my $form ($self->form ($form_name)) {
-        push @return, $form->read (@args);
+        $self->logger_or_die->all (sprintf ("read (%s)", $form->table));
+        push @return, $form->read (%args);
     }
     return @return;
 }
@@ -177,9 +193,9 @@ Not yet tested, probably wrong.
 =cut
 
 sub delete { 
-    my ($self, $form_name, @args) = @_;
+    my ($self, $form_name, %args) = @_;
     my $count = 0;
-    foreach my $entry ($self->read ($form_name, @args)) { 
+    foreach my $entry ($self->read ($form_name, %args)) { 
         $entry->delete || next;
         $count++;
     }
@@ -209,15 +225,19 @@ sub registered_classes { Remedy::Form->registered }
 
 =over 4
 
-=item new ()
-
 =item config (B<Remedy::Config>)
+
+Configuration 
 
 =item logger (B<Remedy::Log>)
 
 =item formdata (%)
 
+This hash is used by B<Remedy::Form> to cache form information (
+
 =item session (B<Remedy::Session>)
+
+Stores the actual connection
 
 =back
 
@@ -227,11 +247,12 @@ sub registered_classes { Remedy::Form->registered }
 
 =item config_or_die (TEXT)
 
-Returns the current [...]
-
 =item logger_or_die (TEXT)
 
 =item session_or_die (TEXT)
+
+Like B<config ()>, B<logger ()>, or B<session (), but die with an error 
+(outside of the standard logging system) if the object is not yet set.  
 
 =back
 
@@ -245,6 +266,8 @@ sub session_or_die { shift->_or_die ('session', "no session",       @_) }
 ### Internal Subroutines ######################################################
 ###############################################################################
 
+### DESTROY ()
+# Tries to close the session on object destruction, if it's connected
 sub DESTROY { if (my $session = shift->session) { $session->disconnect } }
 
 ### _or_die (TYPE, ERROR, EXTRATEXT, COUNT)
@@ -276,13 +299,11 @@ B<Stanford::Remedy>
 
 =head1 SEE ALSO
 
-B<remedy-assign>, B<remedy-close>, B<remedy-list>, B<remedy-ticket>,
-B<remedy-wrapper>
+B<remedy>, B<remedy-ticket>, B<remedy-dump>
 
 =head1 TODO
 
-Touch up the documentation and make it more presentable; fix up the query for
-the "unresolved" tickets to match the version run by other groups.
+Make the B<delete ()> and B<update ()> functions useful.  
 
 =head1 AUTHOR
 

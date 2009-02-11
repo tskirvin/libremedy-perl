@@ -44,6 +44,7 @@ our %FORM = (
 );
     # might add Remedy::Form::Order
 
+
 =back
 
 =cut
@@ -67,7 +68,7 @@ use Remedy::Form::TicketGen;
 use Remedy::Form::Time;
 use Remedy::Form::WorkLog;
 
-our @ISA = qw/Remedy/; 
+our @ISA = qw/Remedy/;
 
 Remedy::Form->register ('ticket', $FORM{'all'});
 
@@ -81,49 +82,96 @@ Remedy::Form->register ('ticket', $FORM{'all'});
 
 =over 4
 
-=item close (TEXT)
+=item get (NUMBER)
 
 =cut
 
-#sub forms { 
-#    my ($self, $check) = @_;
-#    $check ||= 'all';
-#    my $return = $FORM{lc $check};
-#    return unless defined $return;
-#    return ref $return ? @$return : ($return);
-#}
-
-sub get_ticket {
+sub get {
     my ($self, $number) = @_;
     my $logger  = $self->logger_or_die;
-    my $session = $self->session_or_die;
 
-    $logger->all ("parse_incident_number ($number)");
-    my $incnum = $self->parse_incident_number ($number)
-        or pod2usage (-verbose => 1, "Invalid ticket number: $number");
+    $logger->all ("ticket_number ($number)");
+    my $fullnum = $self->ticket_number ($number)
+        or $logger->logdie ("invalid ticket number: $number");
+
+    my $type = $self->ticket_type ($fullnum) 
+        or $logger->logdie ("invalid ticket type: $fullnum");
     
-    $logger->debug ("pulling data about '$incnum'");
-    my @tkt = $self->read ('ticket', 'incnum' => $incnum)
-        or $logger->logdie ("couldn't load $incnum");
+    $logger->debug ("pulling data about '$fullnum'");
+    my @tkt = $self->read ($type, 'number' => $fullnum);
     $logger->debug (sprintf ("%d entries", scalar @tkt));
 
     return unless scalar @tkt;
     return wantarray ? @tkt : $tkt[0];
 }   
 
+=item list (CONSTRAINTS)
+
+=cut
+
+sub list {}
+
+=item close (TEXT)
+
+=cut
 
 sub close {
     my ($self, $text, %args) = @_;
     # $self->assign
 }
 
+=item assign () 
+
+=cut
+
 sub assign  {
     my ($self, %args) = @_;
     
-    
 }
-sub resolve {}
-sub set_status {}
+
+=item resolve ()
+
+=cut
+
+sub resolve {
+    my ($self, $num, %args) = @_;
+    $self->set_status ('Resolved', %args);
+}
+
+=item status ()
+
+=cut
+
+sub status { }
+
+=item text (NUMBER, TYPE)
+
+=cut
+
+sub text { 
+    my ($self, $number, $type) = @_;
+    my $logger = $self->logger_or_die;
+
+    $type ||= '';
+    my @list = qw/primary requestor assignee description resolution worklog/;
+    if    (lc $type eq 'debug')      { @list = qw/debug/           } 
+    elsif (lc $type eq 'audit')      { @list = qw/primary audit/   } 
+    elsif (lc $type eq 'worklog')    { @list = qw/primary worklog/ } 
+    elsif (lc $type eq 'timelog')    { @list = qw/primary timelog/ } 
+    elsif (lc $type eq 'summary')    { @list = qw/primary summary/ } 
+    elsif ($type =~ /^(all|full)$/i) { push @list, qw/audit time/  } 
+    else                             { push @list, qw/summary/     } 
+    $logger->debug ('text types: ' . join (', ', @list));
+
+    local $@;
+    my $tkt = eval { $self->get ($number) };
+    $logger->logdie ("error loading '$number': $@") if $@ || !$tkt;
+
+    return $tkt->print (@list);
+}
+
+sub worklog_add {}
+sub timelog_add {}
 
 =cut
 
@@ -136,48 +184,6 @@ sub set_status {}
 
 =cut
 
-=item get_incnum (ARGHASH)
-
-Finds the incident number for the current incident.  If we do not already
-have one set and stored in B<inc_num ()>, then we will create one using
-B<Remedy::TicketGen ().
-
-=over 4
-
-=item description (TEXT)
-
-=item user (USER)
-
-=back
-
-=cut
-
-sub get_incnum {
-    my ($self, %args) = @_;
-    my ($parent, $session) = $self->parent_and_session (%args);
-
-    return $self->inc_num if defined $self->inc_num;
-    if (! $self->ticketgen) {
-        my %args = ('db' => $parent);
-
-        my $ticketgen = Remedy::TicketGen->new (%args) or $self->error 
-            ("couldn't create new ticket number: " .  $session->error );
-        $ticketgen->description ($args{'description'} || $self->default_desc);
-        $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
-
-        print scalar $ticketgen->print_text, "\n";
-        $ticketgen->save ('db' => $parent) 
-            or $self->error ("couldn't create new ticket number: $@");
-        $ticketgen->reload;
-        $self->ticketgen ($ticketgen);
-        $self->inc_num ($ticketgen->inc_num);
-    }
-
-    return $self->inc_num;
-}
-
-sub default_desc { "Created by " . __PACKAGE__ }
-
 =item assignee 
 
 =cut
@@ -187,7 +193,7 @@ sub assignee {
     return $self->format_email ($self->assignee_name, $self->assignee_sunet);
 }
 
-=item parse_incident_number (NUMBER)
+=item ticket_number (NUMBER)
 
 Given I<NUMBER>, pads that into a valid incident number - that is, something
 that begins with either INC, TAS, or HD0, with a length of 15 characters.  If
@@ -199,19 +205,33 @@ Returns undef if nothing can be created.
 
 =cut
 
-sub parse_incident_number {
+sub ticket_number {
     my ($self, $num) = @_;
     return $num if $num && $num =~ /^(HD0|INC|TAS)/ && length ($num) == 15;
-
     $num ||= "";
+
     if ($num =~ /^(HD0|TAS|INC)(\d+)$/) {
-        $num = $1    . ('0' x (12 - length ($num))) . $2;
+        $num = $1    . ('0' x (15 - length ($num))) . $2;
     } elsif ($num =~ /^(\d+)/) {
         $num = 'INC' . ('0' x (12 - length ($num))) . $1;
     } else {
         return;
     }
     return $num;
+}
+
+=item ticket_type (NUMBER)
+
+
+=cut
+
+sub ticket_type {
+    my ($self, $num) = @_;
+    my $incident = $self->ticket_number ($num) || '';
+    if    ($incident =~ /^INC/) { return 'incident' }
+    elsif ($incident =~ /^TAS/) { return 'task'     }
+    elsif ($incident =~ /^HD0/) { return 'order'    }
+    else                        { return 'unknown'  } 
 }
 
 =item requestor
@@ -252,7 +272,7 @@ sub text_audit {
     foreach my $audit ($self->audit (%args)) { 
         push @return, '' if $count;
         push @return, "Audit Entry " . ++$count;
-        push @return, ($audit->print_text);
+        push @return, ($audit->print);
     }
     return "No Audit Information" unless $count;
     unshift @return, "Audit Entries ($count)";
@@ -359,7 +379,7 @@ sub text_timelog {
     foreach my $time ($self->timelog (%args)) { 
         push @return, '' if $count;
         push @return, "Time Entry " . ++$count;
-        push @return, ($time->print_text);
+        push @return, ($time->print);
     }
     return "No TimeLog Entries";
     return wantarray ? @return : join ("\n", @return, '');
@@ -376,7 +396,7 @@ sub text_worklog {
     foreach my $worklog ($self->worklog (%args)) { 
         push @return, '' if $count;
         push @return, "Work Log Entry " . ++$count;
-        push @return, ($worklog->print_text);
+        push @return, ($worklog->print);
     }
     return "No WorkLog Entries" unless $count;
     return wantarray ? @return : join ("\n", @return, '');
@@ -395,39 +415,6 @@ $TEXT{'worklog'} = \&text_worklog;
 
 =over 4
 
-=item audit ()
-
-=cut
-
-sub audit {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return Remedy::Audit->read ('db' => $self->parent_or_die (%args),
-        'ID' => $self->id, %args);
-}
-
-=item worklog ()
-
-=cut
-
-sub worklog {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return Remedy::WorkLog->read ('db' => $self->parent_or_die (%args),
-        'ID' => $self->inc_num, %args);
-}
-
-=item timelog ()
-
-=cut
-
-sub timelog {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return Remedy::Time->read ('db' => $self->parent_or_die (%args),
-        'ID' => $self->inc_num, %args);
-}
-
 =item worklog_create ()
 
 Creates a new worklog entry, pre-populated with the date and the current
@@ -442,8 +429,8 @@ incident number.  You will still have to add other data.
 sub worklog_create {
     my ($self, %args) = @_;
     return unless $self->inc_num;
-    my $worklog = Remedy::WorkLog->new ('db' => $self->parent_or_die (%args));
-    $worklog->inc_num ($self->inc_num);
+    my $worklog = $self->create ('Remedy::Form::WorkLog', %args);
+    $worklog->number ($self->number);
     $worklog->date_submit ($self->format_date (time));
     return $worklog;
 }
@@ -456,33 +443,11 @@ sub timelog_create {
     my ($self, %args) = @_;
     return unless $self->inc_num;
     my $timelog = $self->parent_or_die (%args)->create ('Remedy::Form::Time');
-    $timelog->inc_num ($self->inc_num);
+    $timelog->number ($self->number);
     return $timelog;
 }
 
 =back
-
-=item print_text ()
-
-=cut
-
-sub print_text {
-    my ($self, @list) = @_;
-
-    unless (scalar @list) { 
-        @list = qw/primary requestor assignee description resolution/;
-    }
-    
-    my @return;
-    foreach (@list) { 
-        next unless my $func = $TEXT{$_};
-        my $text = scalar $self->$func;
-        push @return, $text if defined $text;
-    }
-
-    return wantarray ? @return : join ("\n", @return, '');
-}
-
 
 =item table ()
 

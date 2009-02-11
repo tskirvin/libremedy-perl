@@ -27,7 +27,7 @@ our $DEFAULT_GROUP = '';
 our $DEFAULT_USER = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
 
 ## Default request type, for convenience
-our $DEFAULT_TYPE = "base";
+our $DEFAULT_TYPE = "summary";
 
 ## Tag to include include in the common log file
 our $LOG_TAG = "REMEDY-TKT";
@@ -48,7 +48,6 @@ use warnings;
 use Data::Dumper;
 
 use Getopt::Long;
-# use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
 use Log::Log4perl qw/get_logger/;
 use Pod::Usage;
 use Remedy;
@@ -84,32 +83,17 @@ my $remedy = Remedy::Ticket->connect ($CONFIG)
     or $logger->logdie ("couldn't connect to database: $@");
 $logger->logdie ($@) if $@;
 
-if ($DEBUG_LEVEL) {
-    $logger->more_logging ($DEBUG_LEVEL) if $DEBUG_LEVEL >= 1;
-}
+$logger->more_logging ($DEBUG_LEVEL) if $DEBUG_LEVEL >= 1;
 
 my ($query, @rest) = @ARGV;
 $query ||= '(none)';
 
 if (lc $query eq 'ticket') { 
-    my ($inc, $type, @args) = @rest;
-    my $tkt = get_ticket ($remedy, $inc) or $logger->logdie ('no ticket');
-
-    $type ||= '';
-    my @list = qw/primary requestor assignee description resolution worklog/;
-    if    (lc $type eq 'debug')      { @list = qw/debug/           } 
-    elsif (lc $type eq 'audit')      { @list = qw/primary audit/   }
-    elsif (lc $type eq 'worklog')    { @list = qw/primary worklog/ }
-    elsif (lc $type eq 'timelog')    { @list = qw/primary timelog/ }
-    elsif (lc $type eq 'summary')    { @list = qw/primary summary/ }
-    elsif ($type =~ /^(all|full)$/i) { push @list, qw/audit time/  }
-    else                             { push @list, qw/summary/     }
-
-    print scalar $tkt->print_text (@list);
+    my ($number, $type) = @rest;
+    $type ||= $DEFAULT_TYPE;
+    $logger->info ("text ($number, $type)");
+    print scalar $remedy->text ($number, $type);
     exit 0;
-
-
-
 
 } elsif (lc $query eq 'list') { 
     my ($type, $user, @extra) = @rest;
@@ -271,11 +255,11 @@ sub error_usage {
 }
 
 sub get_ticket {
-    my ($remedy, $inc) = @_;
+    my ($remedy, $number) = @_;
     my $logger = $remedy->logger_or_die ('no logger when getting ticket');
-    $logger->info ("getting ticket '$inc'");
-    my $tkt = eval { $remedy->get_ticket ($inc) };
-    $logger->logdie ("error loading '$inc': $@") if $@ || !$tkt;
+    $logger->info ("getting ticket '$number'");
+    my $tkt = eval { $remedy->get ($number) };
+    $logger->logdie ("error loading '$number': $@") if $@ || !$tkt;
     return $tkt;
 }
 

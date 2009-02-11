@@ -54,7 +54,7 @@ sub init_struct {
     my ($class, %extra) = @_;
     our $new = $class . "::Struct";
 
-    struct $new => {'remedy_form' => 'Stanford::Remedy::Form',
+    struct $new => {'remedy_form' => 'Remedy::Session::Form',
                     'parent'      => 'Remedy',
                     'table'       => '$',
                     'key_field'   => '%'};

@@ -12,7 +12,7 @@ Remedy::Worklog - per-ticket worklogs
 
     # $remedy is a Remedy object
     my @worklog = Remedy::WorkLog->read ('db' => $remedy, 
-        'EID' => 'INC000000002371');
+        'PARENT' => 'INC000000002371');
     for my $entry (@worklog) { print scalar $entry->print_text }
 
 =head1 DESCRIPTION
@@ -62,13 +62,11 @@ The date that the worklog was created.  Corresponds to field
 
 =item id ($)
 
-=item inc_num ($)
+=item number ($)
 
 Incident number of the original ticket.  Corresponds to field 'Incident Number'.
 
 =item map (%)
-
-A 
 
 =item parent ($)
 
@@ -124,7 +122,7 @@ sub field_map {
     'details'               => 'Detailed Description',
     'date_submit'           => 'Work Log Submit Date',
     'submitter'             => 'Work Log Submitter',
-    'inc_num'               => 'Incident Number',
+    'number'                => 'Incident Number',
     'type'                  => 'Work Log Type',
     'time_spent'            => 'Total Time Spent',
     'attach1'               => 'z2AF Work Log01',
@@ -140,7 +138,7 @@ Takes the following arguments:
 
 =over 4
 
-=item EID I<incref>
+=item PARENT I<number>
 
 If set, then we will just search based on the Incident Number field.
 
@@ -150,16 +148,13 @@ Defaults to B<limit_basic ()>.
 
 =cut
 
-sub limit {
+sub limit_pre {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
+    my $parent = $self->parent_or_die ();
 
-    if (my $eid = $args{'EID'}) { 
-        my $field = $self->field_to_id ("Incident Number", 'db' => $parent);
-        return "'$field' == \"$eid\"";
-    }
+    if (my $eid = $args{'PARENT'}) { return ('Incident Number' => $eid); }
 
-    return $self->limit_basic (%args);
+    return %args;
 }
 
 =item print_text ()

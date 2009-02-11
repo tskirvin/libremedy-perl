@@ -13,7 +13,7 @@ Remedy::Time - per-ticket time logs
 
     # $remedy is a Remedy object
     my @worklog = Remedy::Time->read ('db' => $remedy, 
-        'EID' => 'INC000000002371');
+        'PARENT' => 'INC000000002371');
     for my $entry (@worklog) { print scalar $entry->print_text }
 
 =head1 DESCRIPTION
@@ -62,7 +62,7 @@ The date that the worklog was created.  Corresponds to field
 
 =item id ($)
 
-=item inc_num ($)
+=item number ($)
 
 Incident number of the original ticket.  Corresponds to field 'Incident Number'.
 
@@ -96,7 +96,7 @@ Address of the person who created this worklog entry.  Corresponds to field
 sub field_map { 
     'id'          => 'Request ID',
     'submit_time' => 'Create Date',
-    'inc_num'     => 'Incident Number',
+    'number'      => 'Incident Number',
     'time_spent'  => 'Time Spent',
     'submitter'   => 'User Entering Time Spent',
 }

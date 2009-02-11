@@ -15,8 +15,7 @@ use Remedy::Incident;
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Incident maps users (the B<User> table) to support groups
-(B<Group>).
+Stanfor::Remedy::Incident maps [...]
 
 =cut
 
@@ -35,7 +34,7 @@ impact, etc of the ticket; but there are a few other places for customization.
 
 =cut
 
-our %TEXT = ('debug' => \&Remedy::Form::debug_text);
+our %TEXT = ('debug' => \&Remedy::Form::debug);
 
 =back
 
@@ -48,20 +47,20 @@ our %TEXT = ('debug' => \&Remedy::Form::debug_text);
 use strict;
 use warnings;
 
-use Remedy::Ticket;
-
 use Remedy::Form qw/init_struct/;
-
-use Remedy::Form::Audit;
-use Remedy::Form::TicketGen;
-use Remedy::Form::Time;
-use Remedy::Form::WorkLog;
-use Remedy::Form::User;
+use Remedy::Ticket;
 
 our @ISA = init_struct (__PACKAGE__, 'ticketgen' => 'Remedy::Form::TicketGen');
 unshift @ISA, 'Remedy::Ticket::Functions'; 
 
 Remedy::Form->register ('incident', __PACKAGE__);
+
+# Remedy::Form->has_many (__PACKAGE__, 'table' => 'worklog', 
+#   'local' => 'Incident Number', 'remote' => 'Incident Number');
+# Remedy::Form->has_many (__PACKAGE__, 'table' => 'time', 
+#   'local' => 'Incident Number', 'remote' => 'Incident Number');
+# Remedy::Form->has_many (__PACKAGE__, 'table' => 'audit', 
+#   'local' => 'Incident Number', 'field' => 'Incident Number');
 
 ##############################################################################
 ### Subroutines
@@ -85,16 +84,10 @@ sub close {
 sub assign  {
     my ($self, %args) = @_;
     
-    
 }
+
 sub resolve {}
 sub set_status {}
-
-sub read_lala {
-    warn "\@_: @_\n";
-    warn "@ISA\n";
-    return SUPER::read (@_);
-}
 
 =cut
 
@@ -107,10 +100,10 @@ sub read_lala {
 
 =cut
 
-=item get_incnum (ARGHASH)
+=item generate_number (ARGHASH)
 
 Finds the incident number for the current incident.  If we do not already
-have one set and stored in B<inc_num ()>, then we will create one using
+have one set and stored in B<number ()>, then we will create one using
 B<Remedy::TicketGen ().
 
 =over 4
@@ -123,31 +116,36 @@ B<Remedy::TicketGen ().
 
 =cut
 
-sub get_incnum {
+=item generate_number ()
+
+=cut
+
+sub generate_number {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die ();
 
-    return $self->inc_num if defined $self->inc_num;
+    return $self->number if defined $self->number;
     if (! $self->ticketgen) {
         my %args;
 
-        my $ticketgen = $parent->create ('Remedy::Form::TicketGen') 
+        my $ticketgen = $self->create ('Remedy::Form::TicketGen') 
             or $self->error ("couldn't create new ticket number");
         $ticketgen->description ($args{'description'} || $self->default_desc);
         $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
 
         print scalar $ticketgen->print_text, "\n";
-        $ticketgen->save ('db' => $parent) 
-            or $self->error ("couldn't create new ticket number: $@");
+        $ticketgen->save or $self->error 
+            ("couldn't create new ticket number: $@");
         $ticketgen->reload;
+
         $self->ticketgen ($ticketgen);
-        $self->inc_num ($ticketgen->inc_num);
+        $self->number ($ticketgen->number);
     }
 
-    return $self->inc_num;
+    return $self->number;
 }
 
-sub default_desc { "Created by " . __PACKAGE__ }
+sub default_desc { "created by " . __PACKAGE__ }
 
 =item assignee 
 
@@ -155,7 +153,7 @@ sub default_desc { "Created by " . __PACKAGE__ }
 
 sub assignee {
     my ($self) = @_;
-    return $self->format_email ($self->assignee_name, $self->assignee_sunet);
+    return $self->format_email ($self->assignee_name, $self->assignee_netid);
 }
 
 =item requestor
@@ -226,7 +224,7 @@ sub text_primary {
     my @return = "Primary Ticket Information";
     push @return, $self->format_text_field ( 
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Ticket'            => $self->inc_num       || "(none set)", 
+        'Ticket'            => $self->number       || "(none set)", 
         'Summary'           => $self->summary,
         'Status'            => $self->status        || '(not set/invalid)',
         'Status Reason'     => $self->status_reason || '(not set)',
@@ -250,7 +248,7 @@ sub text_requestor {
     
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'SUNet ID'    => $self->sunet || "(none)",
+        'SUNet ID'    => $self->netid || "(none)",
         'Name'        => $self->requestor,
         'Phone'       => $self->requestor_phone,
         'Affiliation' => $self->requestor_affiliation,
@@ -335,40 +333,6 @@ $TEXT{'worklog'} = \&text_worklog;
 ### Related Classes
 ##############################################################################
 
-=head2 Related Classes
-
-=over 4
-
-=item audit ()
-
-=cut
-
-sub audit {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return $self->read ('Remedy::Audit', 'EID' => $self->inc_num, %args);
-}
-
-=item worklog ()
-
-=cut
-
-sub worklog {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return $self->read ('Remedy::WorkLog', 'EID' => $self->inc_num, %args);
-}
-
-=item timelog ()
-
-=cut
-
-sub timelog {
-    my ($self, %args) = @_;
-    return unless $self->inc_num;
-    return $self->read ('Remedy::Time', 'EID' => $self->inc_num, %args);
-}
-
 =item worklog_create ()
 
 Creates a new worklog entry, pre-populated with the date and the current
@@ -384,18 +348,18 @@ incident number.  You will still have to add other data.
 
 sub worklog_create {
     my ($self, %args) = @_;
-    return unless $self->inc_num;
+    return unless $self->number;
     my $worklog = Remedy::WorkLog->new ('db' => $self->parent_or_die (%args));
-    $worklog->inc_num ($self->inc_num);
+    $worklog->number ($self->number);
     $worklog->date_submit ($self->format_date (time));
     return $worklog;
 }
 
 sub timelog_create {
     my ($self, %args) = @_;
-    return unless $self->inc_num;
+    return unless $self->number;
     my $timelog = Remedy::Time->new ( 'db' => $self->parent_or_die (%args));
-    $timelog->inc_num ($self->inc_num);
+    $timelog->number ($self->number);
     return $timelog;
 }
 
@@ -413,30 +377,32 @@ sub timelog_create {
 
 sub field_map { 
     'id'                    => "Entry ID",
-    'date_submit'           => "Submit Date",
-    'assignee_sunet'        => "Assignee Login ID",
-    'date_modified'         => "Last Modified Date",
-    'status'                => "Status",
-    'sunet'                 => "SUNet ID+",
-    'requestor_affiliation' => "SU Affiliation_chr",
-    'requestor_email'       => "Requester Email_chr",
-    'incident_type'         => "Incident Type",
-    'summary'               => "Description",
-    'requestor_last_name'   => "Last Name",
-    'requestor_first_name'  => "First Name",
-    'requestor_phone'       => "Phone Number",
-    'status_reason'         => "Status_Reason",
-    'resolution'            => "Resolution",
-    'inc_num'               => "Incident Number",
-    'urgency'               => "Urgency",
-    'impact'                => "Impact",
-    'priority'              => "Priority",
-    'description'           => "Detailed Decription",
+
     'assignee_group'        => "Assigned Group",
     'assignee_name'         => "Assignee",
+    'assignee_netid'        => "Assignee Login ID",
+    'date_modified'         => "Last Modified Date",
+    'date_resolution'       => "Estimated Resolution Date",
+    'date_submit'           => "Submit Date",
+    'description'           => "Detailed Decription",
+    'impact'                => "Impact",
+    'incident_type'         => "Incident Type",
+    'netid'                 => "SUNet ID+",
+    'number'                => "Incident Number",
+    'priority'              => "Priority",
+    'requestor_affiliation' => "SU Affiliation_chr",
+    'requestor_email'       => "Requester Email_chr",
+    'requestor_first_name'  => "First Name",
+    'requestor_last_name'   => "Last Name",
+    'requestor_phone'       => "Phone Number",
+    'resolution'            => "Resolution",
+    'status_reason'         => "Status_Reason",
+    'status'                => "Status",
+    'summary'               => "Description",
     'time_spent'            => "Time Spent (min)",
     'total_time_spent'      => "Total Time Spent (min)",
-    'date_resolution'       => "Estimated Resolution Date",
+    'urgency'               => "Urgency",
+
 }
 
 =item limit_pre ()
@@ -450,7 +416,12 @@ sub limit_pre {
     my $parent = $self->parent_or_die ();
     my $config = $parent->config_or_die ('no configuration');
 
-    if (my $incnum = $args{'incnum'}) { return ('Incident Number' => $incnum) }
+    if (my $type = $args{'type'}) {
+        return unless $type =~ /^(incident|all|%)$/i;
+        delete $args{'type'};
+    }   
+
+    if (my $number = $args{'number'}) { return ('Incident Number' => $number) }
 
     $args{'Assigned Support Company'}      ||= $config->company   || "%";
     $args{'Assigned Support Organization'} ||= $config->sub_org   || "%";
@@ -525,17 +496,22 @@ sub limit_pre {
 }
 
 
-=item print_text ()
+=item print ()
 
 =cut
 
-sub print_text {
+sub print { 
+    my ($self) = @_;
+    $self->print_pretty (qw/primary requestor assignee description resolution/);
+}
+
+=item print_pretty ()
+
+=cut
+
+sub print_pretty {
     my ($self, @list) = @_;
 
-    unless (scalar @list) { 
-        @list = qw/primary requestor assignee description resolution/;
-    }
-    
     my @return;
     foreach (@list) { 
         next unless my $func = $TEXT{$_};
@@ -549,11 +525,11 @@ sub print_text {
 sub summary_text {
     my ($self) = @_;
 
-    my $inc_num = $self->inc_num;
-       $inc_num =~ s/^INC0+//;
-    my $request = $self->sunet || 'NO_SUNETID';
+    my $number = $self->number;
+       $number =~ s/^INC0+//;
+    my $request = $self->netid || 'NO_SUNETID';
        $request =~ s/NO_SUNETID|^\s*$/(none)/g;
-    my $assign  = $self->assignee_sunet || "(none)";
+    my $assign  = $self->assignee_netid || "(none)";
     my $group   = $self->assignee_group || "(none)";
     my $summary = $self->summary || "";
     map { s/\s+$// } $summary, $group, $assign, $request;
@@ -563,29 +539,18 @@ sub summary_text {
 
     my @return;
     push @return, sprintf ("%-8s   %-8s   %-8s   %-32s  %12s", 
-        $inc_num, $request, $assign, $group, $self->status || '(not set)');
+        $number, $request, $assign, $group, $self->status || '(not set)');
     push @return, sprintf ("  Created: %s   Updated: %s", $create, $update);
     push @return, sprintf ("  Summary: %s", $summary);
 
     return wantarray ? @return : join ("\n", @return, '');
 }
 
-
 =item table ()
 
 =cut
 
 sub table { 'HPD:Help Desk' }
-
-=item name (FIELD)
-
-=cut
-
-sub name { 
-    my ($self, $field) = @_;
-    my $id = $self->field_to_id ($field);
-    return $self->map->{$field};
-}
 
 =back
 

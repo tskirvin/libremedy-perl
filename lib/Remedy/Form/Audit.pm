@@ -75,24 +75,37 @@ Corresponds to 'Log' field.
 sub field_map { 
     'id'          => 'Request ID',
     'create_time' => 'Create Date',
-    'inc_ref'     => "Original Request ID",
+    'number'      => "Original Request ID",
     'user'        => "User",
-    'fields'      => "Fields Changed",
+    'changes'     => "Fields Changed",
     'data'        => "Log",
 }
 
-=item print_text ()
+=item limit_pre ()
+
+=cut
+
+sub limit_pre {
+    my ($self, %args) = @_;
+    my $parent = $self->parent_or_die ();
+
+    if (my $eid = $args{'PARENT'}) { return ('Original Request ID' => $eid); }
+
+    return %args;
+}
+
+=item print ()
 
 Returns a short list of the salient points of the audit entry - the creation
 time, the person that made the changes, and a list of changed fields.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self, %args) = @_;
 
-    my @fields = split (';', $self->fields);
-    my @parse  = grep { $_ } @fields;
+    my @changes = split (';', $self->changes);
+    my @parse   = grep { $_ } @changes;
 
     my @return = $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 

@@ -23,22 +23,20 @@ $Text::Wrap::huge    = 'overflow';
 ### Subroutines ##############################################################
 ##############################################################################
 
-=item debug_text ()
+=head2 Subroutines 
 
-Like B<debug_html ()>, but creates a plaintext string instead, which looks
-something like this:
+=over 4
 
-    FIELD_ID1  FIELD_NAME1  VALUE
-    FIELD_ID2  FIELD_NAME2  VALUE
+=item debug_pretty ()
 
-This is all wrapped with B<Text::Wrap> in a vaguely logical manner. 
-
-TODO: put some of the field numbers back in, at least if they're requested.
-Also, re-create debug_html
+Creates a summary of all valid data within the current form, formatted for
+screen output.  The lines are sorted numerically by field ID, and show the
+field ID, the field name, and the set value.  All of this is then formatted for
+80 characters and wrapped using B<Text::Wrap>.
 
 =cut
 
-sub debug_text {
+sub debug_pretty {
     my ($self, %args) = @_;
     my %schema = $self->schema (%args);
     my $form = $self->remedy_form;
