@@ -1,5 +1,5 @@
 package Remedy::Session::Form;
-our $VERSION = "0.01";  
+our $VERSION = "0.01";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -9,7 +9,6 @@ Remedy::Session
 =head1 SYNOPSIS
 
     use Remedy::Session::Form;
-    [...]
 
 =head1 DESCRIPTION
 

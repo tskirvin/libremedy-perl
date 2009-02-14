@@ -1,21 +1,22 @@
-package Remedy::Form::Incident;
+package Remedy::Ticket::Functions;
 our $VERSION = "0.10";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Incident - Support Group Association
+Remedy::Ticket::Functions - [...]
 
 =head1 SYNOPSIS
 
-use Remedy::Incident;
+use Remedy::Ticket;
 
 # $remedy is a Remedy object
 [...]
 
 =head1 DESCRIPTION
 
-Stanfor::Remedy::Incident maps [...]
+Remedy::Ticket::Functions provides additional functions for B<Remedy::Form>
+objects that inherit from B<Remedy::Ticket>.
 
 =cut
 
@@ -34,7 +35,14 @@ impact, etc of the ticket; but there are a few other places for customization.
 
 =cut
 
-our %TEXT = ('debug' => \&Remedy::Form::debug);
+our %TEXT = ('debug' => \&Remedy::Form::debug_text);
+
+our %FORM = (
+    'all'      => ['Remedy::Form::Incident', 'Remedy::Form::Task'],
+    'incident' => 'Remedy::Form::Incident',
+    'task'     => 'Remedy::Form::Task',
+);
+    # might add Remedy::Form::Order
 
 =back
 
@@ -47,20 +55,17 @@ our %TEXT = ('debug' => \&Remedy::Form::debug);
 use strict;
 use warnings;
 
-use Remedy::Form qw/init_struct/;
-use Remedy::Ticket;
+use Class::Struct;
 
-our @ISA = init_struct (__PACKAGE__, 'ticketgen' => 'Remedy::Form::TicketGen');
-unshift @ISA, 'Remedy::Ticket::Functions'; 
+use Remedy;
+use Remedy::Ticket::Functions;
 
-Remedy::Form->register ('incident', __PACKAGE__);
-
-# Remedy::Form->has_many (__PACKAGE__, 'table' => 'worklog', 
-#   'local' => 'Incident Number', 'remote' => 'Incident Number');
-# Remedy::Form->has_many (__PACKAGE__, 'table' => 'time', 
-#   'local' => 'Incident Number', 'remote' => 'Incident Number');
-# Remedy::Form->has_many (__PACKAGE__, 'table' => 'audit', 
-#   'local' => 'Incident Number', 'field' => 'Incident Number');
+use Remedy::Form::Audit;
+use Remedy::Form::Incident;
+use Remedy::Form::Task;
+use Remedy::Form::TicketGen;
+use Remedy::Form::Time;
+use Remedy::Form::WorkLog;
 
 ##############################################################################
 ### Subroutines
@@ -76,33 +81,35 @@ Remedy::Form->register ('incident', __PACKAGE__);
 
 =cut
 
+sub resolve    { "not implemented" }
+sub set_status { "not implemented" }
+
+sub list {}
+sub assign {}
+sub ticket {}
+sub add_time {}
+sub add_worklog {}
+
+=item parse_ticket_number (NUMBER)
+
+Given I<NUMBER>, pads that into a valid incident number - that is, something
+that begins with either INC, TAS, or HD0, with a length of 15 characters.  If
+no such prefix is offered, we'll assume you want 'INC', as so:  
+
+  990977        INC000000990977
+
+Returns undef if nothing can be created.
+
+=cut
+
+=item requestor
+
+=cut
+
+
 sub close {
     my ($self, $text, %args) = @_;
     # $self->assign
-}
-
-sub assign  {
-    my ($self, %args) = @_;
-    
-}
-
-sub resolve {
-    my ($self, $text, %args) = @_;
-    my $parent = $self->parent_or_die;
-
-    return $self->set_status ('Resolved',
-        'Status_Reason'   => "No Further Action Required", 
-        'Reported Source' => $parent->config_or_die->report_source,
-        'Resolution'      => $text, 
-        'Time Spent'      => $args{'timespent'},
-        'Estimated Resolution Date' => $args{'time'} || time,
-        %args);
-}
-
-sub set_status {
-    my ($self, $status, %args) = @_;
-    return 'no status offered' unless $status;
-    return $self->set ('Status' => $status, %args);
 }
 
 =cut
@@ -116,7 +123,7 @@ sub set_status {
 
 =cut
 
-=item generate_number (ARGHASH)
+=item get_incnum (ARGHASH)
 
 Finds the incident number for the current incident.  If we do not already
 have one set and stored in B<number ()>, then we will create one using
@@ -132,28 +139,21 @@ B<Remedy::TicketGen ().
 
 =cut
 
-=item generate_number ()
-
-=cut
-
-sub generate_number {
+sub get_incnum {
     my ($self, %args) = @_;
-    my $parent = $self->parent_or_die ();
+    my ($parent, $session) = $self->parent_and_session (%args);
 
     return $self->number if defined $self->number;
     if (! $self->ticketgen) {
-        my %args;
-
-        my $ticketgen = $self->create ('Remedy::Form::TicketGen') 
-            or $self->error ("couldn't create new ticket number");
+        my $ticketgen = $parent->create ('Remedy::Form::TicketGen') 
+            or $self->error ("couldn't create new ticket number: " . $session->error );
         $ticketgen->description ($args{'description'} || $self->default_desc);
         $ticketgen->submitter ($args{'user'} || $parent->config->remedy_user);
 
         print scalar $ticketgen->print_text, "\n";
-        $ticketgen->save or $self->error 
-            ("couldn't create new ticket number: $@");
+        $ticketgen->save ('db' => $parent) 
+            or $self->error ("couldn't create new ticket number: $@");
         $ticketgen->reload;
-
         $self->ticketgen ($ticketgen);
         $self->number ($ticketgen->number);
     }
@@ -161,7 +161,7 @@ sub generate_number {
     return $self->number;
 }
 
-sub default_desc { "created by " . __PACKAGE__ }
+sub default_desc { "Created by " . __PACKAGE__ }
 
 =item assignee 
 
@@ -169,12 +169,8 @@ sub default_desc { "created by " . __PACKAGE__ }
 
 sub assignee {
     my ($self) = @_;
-    return $self->format_email ($self->assignee_name, $self->assignee_netid);
+    return $self->format_email ($self->assignee_name, $self->assignee_sunet);
 }
-
-=item requestor
-
-=cut
 
 sub requestor {
     my ($self) = @_;
@@ -264,7 +260,7 @@ sub text_requestor {
     
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'SUNet ID'    => $self->netid || "(none)",
+        'SUNet ID'    => $self->sunet || "(none)",
         'Name'        => $self->requestor,
         'Phone'       => $self->requestor_phone,
         'Affiliation' => $self->requestor_affiliation,
@@ -349,14 +345,43 @@ $TEXT{'worklog'} = \&text_worklog;
 ### Related Classes
 ##############################################################################
 
+=head2 Related Classes
+
+=over 4
+
+=item audit ()
+
+=cut
+
+sub audit {
+    my ($self, %args) = @_;
+    $self->related_by_id ('audit', 'PARENT' => $self->id, %args);
+}
+
+=item worklog (ARGHASH)
+
+=cut
+
+sub worklog {
+    my ($self, %args) = @_;
+    $self->related_by_id ('worklog', 'PARENT' => $self->number, %args);
+}
+
+=item timelog ()
+
+=cut
+
+sub timelog {
+    my ($self, %args) = @_;
+    $self->related_by_id ('Remedy::Form::Time', 'PARENT' => $self->number, %args);
+}
+
 =item worklog_create ()
 
 Creates a new worklog entry, pre-populated with the date and the current
 incident number.  You will still have to add other data.
 
 =over 4
-
-=item timelog_create (TIME)
 
 =back
 
@@ -365,16 +390,20 @@ incident number.  You will still have to add other data.
 sub worklog_create {
     my ($self, %args) = @_;
     return unless $self->number;
-    my $worklog = Remedy::WorkLog->new ('db' => $self->parent_or_die (%args));
+    my $worklog = $self->create ('Remedy::WorkLog', %args); # TODO: 'or die'
     $worklog->number ($self->number);
     $worklog->date_submit ($self->format_date (time));
     return $worklog;
 }
 
+=item timelog_create (TIME)
+
+=cut
+
 sub timelog_create {
     my ($self, %args) = @_;
     return unless $self->number;
-    my $timelog = Remedy::Time->new ( 'db' => $self->parent_or_die (%args));
+    my $timelog = $self->create ('Remedy::Time', %args);
     $timelog->number ($self->number);
     return $timelog;
 }
@@ -383,167 +412,46 @@ sub timelog_create {
 
 =cut
 
-=head2 B<Remedy::Form Overrides>
+=item limit (ARGHASH)
 
-=over 4
 
-=item field_map
 
-=cut
+=over 4 
 
-sub field_map { 
-    'id'                    => "Entry ID",
+=item assigned_user (USER)
 
-    'assignee_group'        => "Assigned Group",
-    'assignee_name'         => "Assignee",
-    'assignee_netid'        => "Assignee Login ID",
-    'date_modified'         => "Last Modified Date",
-    'date_resolution'       => "Estimated Resolution Date",
-    'date_submit'           => "Submit Date",
-    'description'           => "Detailed Decription",
-    'impact'                => "Impact",
-    'incident_type'         => "Incident Type",
-    'netid'                 => "SUNet ID+",
-    'number'                => "Incident Number",
-    'priority'              => "Priority",
-    'requestor_affiliation' => "SU Affiliation_chr",
-    'requestor_email'       => "Requester Email_chr",
-    'requestor_first_name'  => "First Name",
-    'requestor_last_name'   => "Last Name",
-    'requestor_phone'       => "Phone Number",
-    'resolution'            => "Resolution",
-    'status_reason'         => "Status_Reason",
-    'status'                => "Status",
-    'summary'               => "Description",
-    'time_spent'            => "Time Spent (min)",
-    'total_time_spent'      => "Total Time Spent (min)",
-    'urgency'               => "Urgency",
+If not offered, 'Assigned Login ID' is set to the value of 'username'
+(defaults to 
 
-}
+=item groups (GROUPS)
 
-=item limit_pre ()
+Given a list of groups I<GROUPS> (either an arrayref containing a single group
+name, or a single group name), creats the 'OR' separated list of possible
+groups that the field F<Assigned Group> could belong to.  
 
-extra is above
+=item 'Assigned Support Company' (<ITEM>), 
+
+=item 'Assigned Support Organization' (<ITEM>)
+
+=item 'Assigned Support Group' (<ITEM>)
+
+Taken from 
+
+=back
+
+Once all checks have been done, then we'll get additional limiting infromation
+from 
 
 =cut
-
-sub limit_pre {
-    my ($self, %args) = @_;
-    my $parent = $self->parent_or_die ();
-    my $config = $parent->config_or_die ('no configuration');
-
-    if (my $type = $args{'type'}) {
-        return unless $type =~ /^(incident|all|%)$/i;
-        delete $args{'type'};
-    }   
-
-    if (my $number = $args{'number'}) { return ('Incident Number' => $number) }
-
-    $args{'Assigned Support Company'}      ||= $config->company   || "%";
-    $args{'Assigned Support Organization'} ||= $config->sub_org   || "%";
-    $args{'Assigned Group'}                ||= $config->workgroup || "%";
-
-    my %fields = $self->fields (%args);
-
-    my @extra;
-
-    if (my $extra = $args{'extra'}) { 
-        @extra = ref $extra ? @$extra : $extra;
-        delete $args{'extra'};
-    }
-
-    if (my $groups = $args{'groups'}) {
-        if (my $id = $fields{'Assigned Group'}) {
-            my @list;
-            foreach (ref $groups ? @$groups : $groups) { 
-                my $name = $_->name;
-                push @list, "'$id' = \"$name\"";
-            }
-            push @extra, ('(' . join (" OR ", @list) . ')')
-                if scalar @list;
-        }
-    }
-
-    # Don't forget 'Incident Type' and a simple "only give me tasks" option
-
-#('Assigned Group*+' = "ITS Unix Systems" OR 'Assigned Group*+' = [...])
-#AND ('Status*' = "Assigned" OR 'Status*' OR [...]) 
-#AND ('Last Modified Date' <= $DATE$  (5*60*24*60)) AND ('Incident Type*' = "Request")
-
-    if (my $status = lc $args{'status'}) { 
-        if    ($status eq 'open')   { $args{'Status'} = '-Resolved'     }
-        elsif ($status eq 'closed') { $args{'Status'} = '+=Resolved'    }
-        else                        { $args{'Status'} = $args{'status'} }
-        delete $args{'status'};
-    } 
-
-    if (my $user_assign = $args{'assigned_user'}) { 
-        $args{'Assignee Login ID'} = $user_assign;
-        delete $args{'assigned_user'};
-    } else { 
-        $args{'Assignee Login ID'} = $config->username || '%';
-    }
-
-    if (my $user_submit = $args{'submitted_user'}) { 
-        $args{'SUNet ID+'} = $user_submit;
-        delete $args{'submitted_user'};
-    }
-
-    if ($args{'unassigned'}) { 
-        $args{'Assignee Login ID'} = undef;
-        delete $args{'unassigned'};
-    }
-
-    if (my $modify = $args{'last_modify_before'}) { 
-        $args{'Last Modified Date'} = "-$modify";
-        delete $args{'last_modify_before'};
-    }
-
-    if (my $create = $args{'submit_before'}) { 
-        $args{'Submit Date'} = "-$create";
-        delete $args{'submit_before'};
-    }
-
-    if (scalar @extra) { $args{'extra'} ||= [@extra] }
-
-    return %args;
-}
-
-
-=item print ()
-
-=cut
-
-sub print { 
-    my ($self) = @_;
-    $self->print_pretty (qw/primary requestor assignee description resolution/);
-}
-
-=item print_pretty ()
-
-=cut
-
-sub print_pretty {
-    my ($self, @list) = @_;
-
-    my @return;
-    foreach (@list) { 
-        next unless my $func = $TEXT{$_};
-        my $text = scalar $self->$func;
-        push @return, $text if defined $text;
-    }
-
-    return wantarray ? @return : join ("\n", @return, '');
-}
 
 sub summary_text {
     my ($self) = @_;
 
     my $number = $self->number;
        $number =~ s/^INC0+//;
-    my $request = $self->netid || 'NO_SUNETID';
+    my $request = $self->sunet || 'NO_SUNETID';
        $request =~ s/NO_SUNETID|^\s*$/(none)/g;
-    my $assign  = $self->assignee_netid || "(none)";
+    my $assign  = $self->assignee_sunet || "(none)";
     my $group   = $self->assignee_group || "(none)";
     my $summary = $self->summary || "";
     map { s/\s+$// } $summary, $group, $assign, $request;
@@ -554,17 +462,11 @@ sub summary_text {
     my @return;
     push @return, sprintf ("%-8s   %-8s   %-8s   %-32s  %12s", 
         $number, $request, $assign, $group, $self->status || '(not set)');
-    push @return, sprintf ("  Created: %s   Updated: %s", $create, $update);
+    push @return, sprintf ("  Created: %23s        Updated: %23s", $create, $update);
     push @return, sprintf ("  Summary: %s", $summary);
 
     return wantarray ? @return : join ("\n", @return, '');
 }
-
-=item table ()
-
-=cut
-
-sub table { 'HPD:Help Desk' }
 
 =back
 
@@ -576,7 +478,7 @@ sub table { 'HPD:Help Desk' }
 
 =head1 REQUIREMENTS
 
-B<Remedy::Ticket>, B<Class::Struct>, B<Remedy::Form>
+B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 

@@ -51,12 +51,12 @@ B<Remedy::Config>.
 =cut
 
 ##############################################################################
-### Configuration
+### Configuration ############################################################
 ##############################################################################
 
 =head1 Configuration
 
-The following default options are used to 
+The following default options are used to
 
 =over 4
 
@@ -69,7 +69,7 @@ sure that ownerships are acceptable.  No default.
 
 our $FILE = '';
 
-=item $FORMAT 
+=item $FORMAT
 
 Defines the format of the messages we will print on B<STDERR>.  Defaults
 to '%F{1}: %m%n', which indicates that we will have the last component of
@@ -85,7 +85,7 @@ our $FORMAT = '%F{1}: %m%n';
 =item $FORMAT_FILE
 
 Defines the format of the messages that we will print to I<$FILE>, above.
-Defaults to '[%d] %p ' prepended to B<$FORMAT>, which adds the timedate and 
+Defaults to '[%d] %p ' prepended to B<$FORMAT>, which adds the timedate and
 debug level to the above format.
 
 There is no accessor override for this function.
@@ -107,7 +107,7 @@ our $LOGLEVEL = $Log::Log4perl::ERROR;
 
 Default loglevel for output to the logfile; anything up to AND NOT EXCEEDING
 this level is saved.  Set to I<$Log::Log4perl::INFO>, indicating that we want
-to record levels I<info>, I<warn>, I<error>, and I<fatal>.  
+to record levels I<info>, I<warn>, I<error>, and I<fatal>.
 
 =cut
 
@@ -121,7 +121,7 @@ our $LOGLEVEL_FILE = $Log::Log4perl::INFO;
 $Log::Log4perl::one_message_per_appender = 1;
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -135,11 +135,11 @@ use Log::Log4perl::Level;
 ### Subroutines ##############################################################
 ##############################################################################
 
-=head1 Subroutines 
+=head1 Subroutines
 
 =head2 B<Class::Struct> Accessors
 
-These fields can be initialized via B<new ()> or per-function.  
+These fields can be initialized via B<new ()> or per-function.
 
 =over 4
 
@@ -182,7 +182,7 @@ return the root-level logger.
 
 =cut
 
-sub get_logger { 
+sub get_logger {
     my ($self) = @_;
     return $self->logger if (ref $self && $self->logger);
     return Log::Log4perl::get_logger ('');
@@ -222,8 +222,8 @@ sub init {
 
     ## Create the screen appender
     $logger->all ('adding screen appender');
-    my $appender =  Log::Log4perl::Appender->new (  
-        "Log::Log4perl::Appender::ScreenColoredLevels", 
+    my $appender =  Log::Log4perl::Appender->new (
+        "Log::Log4perl::Appender::ScreenColoredLevels",
         'name' => "screen", stderr => 1);
     my $layout = Log::Log4perl::Layout::PatternLayout->new ($FORMAT);
     $appender->layout ($layout);
@@ -237,7 +237,7 @@ sub init {
         my $appender = Log::Log4perl::Appender->new (
             "Log::Log4perl::Appender::File",
             'name' => 'file', 'filename' => $name, 'utf8' => 1);
-        my $layout = Log::Log4perl::Layout::PatternLayout->new 
+        my $layout = Log::Log4perl::Layout::PatternLayout->new
             ($FORMAT_FILE);
         $appender->layout ($layout);
 
@@ -246,14 +246,14 @@ sub init {
         $logger->add_appender ($appender);
     }
 
-    my $level = $self->level_file >= $self->level ? $self->level_file 
+    my $level = $self->level_file >= $self->level ? $self->level_file
                                                   : $self->level;
     $logger->all ('set global appender level to' . $level);
     $logger->level ($level);
     $self->logger ($logger);
 }
 
-## Initialize default logging 
+## Initialize default logging
 __PACKAGE__->init ();
 
 =item more_logging (COUNT [, APPENDERS])
@@ -280,12 +280,12 @@ sub more_logging {
 
     $logger->all ("increasing global loglevel by $count");
     $logger->more_logging (int $count);
-    
+
     $logger->all (sprintf ("adjusting appender thresholds by %d for %s",
         int $count, join (', ', @$appender)));
     Log::Log4perl->appender_thresholds_adjust (- int $count, $appender);
 
-    $logger->debug (sprintf ('increased loglevel by %d for %s', 
+    $logger->debug (sprintf ('increased loglevel by %d for %s',
         int $count, join (', ', @$appender)));
     return 1;
 }
@@ -308,11 +308,11 @@ The main object that you will interact with is a B<Log::Log4perl::Logger>
 object (B<$logger>).  This object offers a variety of priority logging functions:
 
     $logger->all   ()    # incorrectly listed as 'trace' in the man page
-    $logger->debug () 
-    $logger->info  ()  
-    $logger->warn  ()  
-    $logger->error () 
-    $logger->fatal () 
+    $logger->debug ()
+    $logger->info  ()
+    $logger->warn  ()
+    $logger->error ()
+    $logger->fatal ()
 
 Each of these functions corresponds to a priority.  When the function is
 called, we compare this priority to the loglevel set within $logger; if the
@@ -375,7 +375,7 @@ but we don't want that extra information filling the logfile.
 You may note that B<Log::Log4perl>'s docs are very much centered on the
 "configuration file" initialization schemes.  I have attempted to ignore this
 where possible, and handle everything in a fairly object-oriented manner; but
-the default methods may be more appropriate, and are certainly more powerful.  
+the default methods may be more appropriate, and are certainly more powerful.
 So this decision may be revisited later.
 
 You may also note that there are all sorts of other issues to worry about, such as

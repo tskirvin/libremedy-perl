@@ -1,5 +1,5 @@
 package Remedy::Config;
-our $VERSION = '0.52';
+our $VERSION = '0.55';
 
 =head1 NAME
 
@@ -11,11 +11,10 @@ Remedy::Config - Remedy configuration files and logging
 
     my $file = '/etc/remedy/remedy.conf';
     my $config = Remedy::Config->load ($file);
-    
+
 =head1 DESCRIPTION
 
 Remedy::Config encapsulates all of the configuration information for B<Remedy>.
-
 It is implemented as a Perl class that declares and sets the defaults for
 various configuration variables and then loads (in order of preference) the
 offered filename, the one specified by the REMEDY_CONFIG environment variable,
@@ -46,40 +45,10 @@ This ensures that Perl doesn't think there is an error when loading the file.
 =cut
 
 ##############################################################################
-### Declarations 
+### Configuration ############################################################
 ##############################################################################
 
-use strict;
-use warnings;
-
-use Class::Struct;
-use Log::Log4perl;
-use Remedy::Log;
-
-my %options = (
-    'company'       => '$',
-    'config'        => '$',
-    'count'         => '$',
-    'debug_level'   => '$',
-    'domain'        => '$',
-    'logfile'       => '$',
-    'logfile_level' => '$',
-    'log'           => 'Remedy::Log',
-    'remedy_host'   => '$',
-    'remedy_port'   => '$',
-    'remedy_user'   => '$',
-    'remedy_pass'   => '$',
-    'sub_org'       => '$',
-    'username'      => '$',
-    'workgroup'     => '$',
-    'wrap'          => '$',
-);
-
-struct 'Remedy::Config' => {%options};
-
-##############################################################################
-### Configuration
-##############################################################################
+our %FUNCTIONS;
 
 =head1 Configuration
 
@@ -98,6 +67,10 @@ accessors.
 =cut
 
 our ($REMEDY_HOST, $REMEDY_PORT, $REMEDY_USER, $REMEDY_PASS);
+$FUNCTIONS{'remedy_host'} = \$REMEDY_HOST;
+$FUNCTIONS{'remedy_port'} = \$REMEDY_PORT;
+$FUNCTIONS{'remedy_user'} = \$REMEDY_USER;
+$FUNCTIONS{'remedy_pass'} = \$REMEDY_PASS;
 
 =item $COMPANY, $SUB_ORG, $WORKGROUP
 
@@ -109,6 +82,9 @@ Matches the B<company>, B<sub_org>, and B<workgroup> accessors.
 =cut
 
 our ($COMPANY, $SUB_ORG, $WORKGROUP);
+$FUNCTIONS{'company'}   = \$COMPANY;
+$FUNCTIONS{'sub_org'}   = \$SUB_ORG;
+$FUNCTIONS{'workgroup'} = \$WORKGROUP;
 
 =item $DOMAIN
 
@@ -119,50 +95,79 @@ Matches the I<domain> accessor.
 
 =cut
 
-our ($DOMAIN);
+our $DOMAIN;
+$FUNCTIONS{'domain'} = \$DOMAIN;
+
+=item $HELPDESK
+
+Sets a queue name for where tickets should go when they are "unassigned".  
+No default.  Matches the 'helpdesk' accessor.
+
+=cut
+
+our $HELPDESK;
+$FUNCTIONS{'helpdesk'} = \$HELPDESK;
+
+=item $REPORT_SOURCE
+
+The value we'll enter into 'Reported Source' when asked.  Defaults to 'Other'.
+Matches the 'report_source' accessor.
+
+=cut
+
+our $REPORT_SOURCE = "Other";
+$FUNCTION{'report_source'} = \$REPORT_SOURCE;
 
 =item $CONFIG
 
-The location of the configuration file we're going to load to get defaults.  
-Defaults to F</etc/out-of-date/server.conf>; can be overridden either by
-passing a different file name to B<load ()>, or by setting the environment 
-variable I<REMEDY_CONFIG>.
+The location of the configuration file we're going to load to get defaults.
+Defaults to F</etc/remedy/config>; can be overridden either by passing a
+different file name to B<load ()>, or by setting the environment variable
+I<REMEDY_CONFIG>.
 
 Matches the B<config> accessor.
 
 =cut
 
 our $CONFIG = '/etc/remedy/config';
+$FUNCTIONS{'config'} = \$CONFIG;
 
 =item $DEBUG_LEVEL
 
 Defines how much debugging information to print on user interaction.  Set to
-a string, defaults to I<$Log::Log4perl::ERROR>.  See B<Remedy::Log> for more
-details.
+a string, defaults to I<$Log::Log4perl::ERROR>.  See B<Remedy::Log>.
+
+Matches the I<loglevel> accessor.
 
 =cut
 
 our $DEBUG_LEVEL = $Log::Log4perl::ERROR;
+$FUNCTIONS{'loglevel'} = \$DEBUG_LEVEL;
 
 =item $LOGFILE
 
-If set, we will also save additional logs to this file using B<Log::Log4perl>.  
+If set, we will append logs to this file.  See B<Remedy::Log>.
+
+Matches the I<file> accessor.
 
 =cut
 
 our $LOGFILE = "";
+$FUNCTIONS{'logfile'} = \$LOGFILE;
 
 =item $LOGFILE_LEVEL
 
-Like $DEBUG_LEVEL, but defines the level of log messages we'll print to
-I<$LOGFILE>.  Defaults to I<$Log::Log4perl::INFO>.  See B<Remedy::Log> for more
-details.
+Like I<$DEBUG_LEVEL>, but defines the level of log messages we'll print to
+I<$LOGFILE>.  Defaults to I<$Log::Log4perl::INFO>.  See B<Remedy::Log>.
+
+Matches the B<logfile_level> accessor.
 
 =cut
 
 our $LOGFILE_LEVEL = $Log::Log4perl::INFO;
+$FUNCTIONS{'loglevel_file'} = \$LOGFILE_LEVEL;
 
-=item $SEARCH_COUNT 
+=item $SEARCH_COUNT
 
 How many entries should we return on a search?  Defaults to 50.
 
@@ -171,6 +176,7 @@ Matches the B<count> accessor.
 =cut
 
 our $SEARCH_COUNT = 50;
+$FUNCTIONS{'count'} = \$SEARCH_COUNT;
 
 =item $TEXT_WRAP
 
@@ -182,27 +188,54 @@ Matches the B<wrap> accessor.
 =cut
 
 our $TEXT_WRAP = 80;
+$FUNCTIONS{'wrap'} = \$TEXT_WRAP;
 
 =back
 
 =cut
 
 ##############################################################################
-### Subroutines 
+### Declarations #############################################################
 ##############################################################################
 
-=head1 SUBROUTINES 
+use strict;
+use warnings;
 
-As noted above, most subroutines are handled by B<Class::Struct>; please see
-its man page for more details about the various sub-functions.
+use Class::Struct;
+use Remedy::Log;
+
+my %opts;
+foreach (keys %FUNCTIONS) { $opts{$_} = '$' }
+
+struct 'Remedy::Config' => { 
+    'log' => 'Remedy::Log',
+    %opts, 
+};
+
+
+##############################################################################
+### Subroutines ##############################################################
+##############################################################################
+
+=head1 Subroutines
+
+=head2 B<Class::Struct> Accessors
+
+The accessors listed in CONFIGURATION can be initialized via B<new ()> or
+per-function.
+
+=head2 Additional Functions
 
 =over 4
 
 =item load ([FILE])
 
-Creates a new B<Remedy::Config> object and loads F<FILE> (or the 
-value of the environment variable B<OOD_CONFIG>, or the value of $CONFIG) to
-generate its default values.  Returns the new object.
+Creates a new B<Remedy::Config> object, loads F<FILE> to update defaults, (if
+not offered, the value of the environment variable I<REMEDY_CONFIG> or the value
+of I<$CONFIG>), and initalizes the object from the defaults.  This includes
+creating the B<Remedy::Log> object.
+
+Returns the new object.
 
 =cut
 
@@ -213,13 +246,12 @@ sub load {
     my $self = $class->new ();
 
     $self->config ($file);
-    _init_options ($self);
+    _init_functions ($self);
 
     my $log = Remedy::Log->new (
-        'name'       => 'Remedy',
         'file'       => $self->logfile,
-        'level_file' => $self->logfile_level,
-        'level'      => $self->debug_level
+        'level'      => $self->loglevel,
+        'level_file' => $self->loglevel_file,
     );
     $log->init;
 
@@ -228,10 +260,21 @@ sub load {
     $self;
 }
 
-sub logger {
-    my ($self, $category) = @_;
-    return unless $self->log;
-    return $self->log->logger ();
+=item debug ()
+
+Return a string with all valid keys and values listed.
+
+=cut
+
+sub debug {
+    my ($self) = @_;
+    my @return;
+    foreach my $key (keys %FUNCTIONS) { 
+        my $value = $self->$key;
+        push @return, sprintf ("%s: %s", $key, defined $value ? $value 
+                                                              : '*undef*');
+    }
+    wantarray ? @return : join ("\n", @return, '');
 }
 
 =back
@@ -239,32 +282,22 @@ sub logger {
 =cut
 
 ##############################################################################
-### Internal Subroutines
+### Internal Subroutines #####################################################
 ##############################################################################
 
-### _init_options ()
-# takes care of setting the various options.
-sub _init_options {
+### _init_functions ()
+# Takes care of setting the various options.  
+sub _init_functions {
     my ($self) = @_;
-    $self->count         ($SEARCH_COUNT);
-    $self->company       ($COMPANY);
-    $self->debug_level   ($DEBUG_LEVEL);
-    $self->domain        ($DOMAIN);
-    $self->logfile       ($LOGFILE);
-    $self->logfile_level ($LOGFILE_LEVEL);
-    $self->remedy_host   ($REMEDY_HOST);
-    $self->remedy_pass   ($REMEDY_PASS);
-    $self->remedy_port   ($REMEDY_PORT);
-    $self->remedy_user   ($REMEDY_USER);
-    $self->sub_org       ($SUB_ORG);
-    $self->workgroup     ($WORKGROUP);
-    $self->wrap          ($TEXT_WRAP);
+    foreach my $key (keys %FUNCTIONS) { 
+        my $value = $FUNCTIONS{$key};
+        $self->$key ($$value) 
+    }
     $self;
 }
 
-
 ##############################################################################
-### Final Documentation 
+### Final Documentation ######################################################
 ##############################################################################
 
 =head1 ENVIRONMENT
@@ -280,9 +313,13 @@ configuration file to load instead of F</etc/remedy/config>.
 
 =cut
 
+=head1 REQUIREMENTS
+
+B<Remedy::Log>
+
 =head1 SEE ALSO
 
-Class::Struct(8), Remedy(8), Remedy::Log(8)
+Class::Struct(8), Remedy(8)
 
 =head1 HOMEPAGE
 

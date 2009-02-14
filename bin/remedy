@@ -2,78 +2,61 @@
 # Copyright and license are in the documentation below.
 
 ##############################################################################
-### Configuration
+### Configuration ############################################################
 ##############################################################################
 
 ## Modify and uncomment this to use user code instead of just system-wide
 ## modules, or to use development versions.
 # use lib '/FULL/PATH/TO/PERL/MODULES';
-use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib"; 
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
-## Shared configuration file.  Set with '--config'
-our $CONFIG = "/etc/remedy/config";
-
 ## Print debugging information?  Set with '--debug', can be set many times
-our $DEBUG_LEVEL = 0;
+our $DEBUG = 0;
 
 ## Defaults for 'userinfo' and 'groupinfo'
 our $DEFAULT_USER  = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
 our $DEFAULT_GROUP = '';
 
-## Tag to include include in the common log file
-our $LOG_TAG = "REMEDY-INFO";
-
 ## Will be overridden by '--user' and '--group'
 use vars qw/$USER $GROUP/;
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
 use warnings;
 
 use Getopt::Long;
-use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
 use Pod::Usage;
 use Remedy;
 use Remedy::Form::People;
-use Text::Wrap;
 
 $0 =~ s%.*/%%g;     # Lose the annoying path information
 $|++;               # Flush output
 
 ##############################################################################
-### main ()
+### main () ##################################################################
 ##############################################################################
+
+my $logger = Remedy::Log->get_logger;
 
 my $parser = new Getopt::Long::Parser;
 my $result = $parser->getoptions (
-    'c|config=s'    => \$CONFIG,
     'user=s'        => \$USER,
     'group=s'       => \$GROUP,
-    'd|debug+'      => \$DEBUG_LEVEL,
-    'man'           => sub { pod2usage (-verbose=>2, -noperldoc => 1) },
-    'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
+    'd|debug+'      => \$DEBUG,
+    'man'           => sub { pod2usage (-verbose => 2, -noperldoc => 1) },
+    'h|help'        => sub { pod2usage (-verbose => 1) }) || error_usage ();
 
-map { untaint ($_) } $CONFIG, $USER, $GROUP;
+map { untaint ($_) } $USER, $GROUP;
 
-my $config = eval { Remedy::Config->load ($CONFIG) };
-die "$@\n" unless $config;
-die "$config\n" if $@;
-
-# Still want it to log the fact that we ran to the logfile!
-
-my $logger = $config->log->logger;
+my $remedy = eval { Remedy->connect ('debug' => $DEBUG) }
+    or $logger->logdie ("couldn't connect to database: $@");
+$logger->logdie ($@) if $@;
 
 my ($query, @rest) = @ARGV;
 $query ||= '(none)';
-
-$logger->debug ("Connecting to database");
-my $remedy = eval { Remedy->connect ($config) }
-    or $logger->logdie ("couldn't connect to database: $@");
-$logger->logdie ($@) if $@;
 
 if (lc $query eq 'table') {   
     my ($table) = @rest;
@@ -105,7 +88,7 @@ if (lc $query eq 'table') {
     foreach my $obj (@return) { 
         my $print = scalar $obj->print_text;
         print $print;
-        if ($DEBUG_LEVEL) {
+        if ($DEBUG) {
             my $debug = scalar $obj->debug_text;
             if ($debug ne $print) { print "\nRaw Data:\n$debug" }
         } 
@@ -119,8 +102,8 @@ if (lc $query eq 'table') {
     my %search = ('Support Group Name' => $group);
     $logger->info ("Printing group information for '$group'");
     foreach my $obj ($remedy->read ('supportgroup', %search)) { 
-        print scalar ($DEBUG_LEVEL ? $obj->debug_text 
-                                   : $obj->print_text);
+        print scalar ($DEBUG ? $obj->debug_text 
+                             : $obj->print_text);
     }
 
 } elsif (lc $query eq 'help') {
@@ -138,7 +121,9 @@ exit 0;
 # Uses Pod::Usage to print an error message and the usage information
 sub error_usage { 
     my ($error) = @_;
-    pod2usage (-exit_status => 2, -verbose => 1, -message => $error) 
+    my $logger = Remedy::Log->get_logger ();
+    $logger->error ($error);
+    pod2usage (-exit_status => 2, -verbose => 1);
 }
 
 ### untaint (TEXT, MATCH)
@@ -212,10 +197,10 @@ Prints a basic help message and exits.
 Loads the specified configuration file with B<Remedy::Config> instead of the
 default.
 
-=item B<-d>, B<--debug>
+=item <-d>, B<--debug> 
 
 Print debugging information, both within this module and within the Remedy
-module.
+module.  Can be offered multiple times to increase debugging accordingly.
 
 =item B<--group> I<GROUP>
 
@@ -274,12 +259,19 @@ B<Remedy>, B<Remedy::Form::People>
 
 B<Remedy::Config>, B<Remedy::Form>, B<Remedy::Form::SupportGroup>
 
+=head1 HOMEPAGE
+
+TBD.
+
 =head1 AUTHOR
 
 Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-For Stanford internal use only.
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
+
+This program is free software; you may redistribute it and/or modify
+it under the same terms as Perl itself.
 
 =cut

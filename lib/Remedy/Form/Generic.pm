@@ -70,14 +70,6 @@ Empty.  Generic forms have no field maps.
 
 sub field_map { }
 
-=item print_text ()
-
-Points back at B<debug_text ()> (from B<Remedy::Form::Utility>).
-
-=cut
-
-sub print_text { shift->debug_text (@_) }
-
 =item table_human ()
 
 Returns the table name set at creation time.  Overrides the default function.

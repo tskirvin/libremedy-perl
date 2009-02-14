@@ -8,24 +8,10 @@
 ## Modify and uncomment this to use user code instead of just system-wide
 ## modules, or to use development versions.
 # use lib '/FULL/PATH/TO/PERL/MODULES';
-use lib "/afs/ir/users/t/s/tskirvin/work/remedy/Stanford-Remedy/lib"; 
 use lib "/afs/ir/users/t/s/tskirvin/work/libremedy-perl/lib";
 
-## Shared configuration file.  Set with '--config'
-our $CONFIG = "/etc/remedy/config";
-
-## Print debugging information?  Set with '--debug'
+## Print debugging information?  Set with '--debug', can be set many times
 our $DEBUG = 0;
-
-## Defaults for 'userinfo' and 'groupinfo'
-our $DEFAULT_USER  = $ENV{'REMOTE_USER'} || $ENV{'USER'} || "unknown";
-our $DEFAULT_GROUP = '';
-
-## Higher is more verbose ('9' is the highest).  Set to 9 with '--debug'
-our $LOGLEVEL = 1;
-
-## Tag to include include in the common log file
-our $LOG_TAG = "REMEDY-DUMP";
 
 ##############################################################################
 ### Declarations
@@ -46,44 +32,46 @@ $|++;               # Flush output
 ### main ()
 ##############################################################################
 
+my $logger = Remedy::Log->get_logger;
+
 my $parser = new Getopt::Long::Parser;
 my $result = $parser->getoptions (
-    'c|config=s'    => \$CONFIG,
-    'd|debug'       => sub { $DEBUG = 1; $LOGLEVEL = 9 },
+    'd|debug+'      => \$DEBUG,
     'man'           => sub { pod2usage (-verbose=>2, -noperldoc => 1) },
     'h|help'        => sub { pod2usage (-verbose=>1) }) || error_usage ();
-map { untaint ($_) } $CONFIG;
 
-debug ("Loading config file $CONFIG") if $CONFIG;
-my $config = eval { Remedy::Config->load ($CONFIG) };
-error ($@) unless $config;
-error ($config) if $@;
+my $remedy = eval { Remedy->connect ('debug' => $DEBUG) }
+    or $logger->logdie ("couldn't connect to database: $@");
+$logger->logdie ($@) if $@;
 
 my ($table, @rest) = @ARGV;
 error_usage ('need a table name') unless $table;
 
-debug ("Connecting to database");
-my $remedy = eval { Remedy->connect ($config) }
-    or error ("couldn't connect to database: $@");
-error ($@) if $@;
-
-debug ("Printing all entries in table '$table'");
+## Pulling all entries from table
+$logger->info ("finding all entries in table '$table'");
 my @entries = eval { $remedy->read ($table, 'all' => 1) };
 if ($@) { 
     print "No information for '$table'; possible values:\n";
     foreach (sort $remedy->registered_classes) { print " * $_\n" }
     exit 1;
-} elsif (scalar @entries) { 
+}
+$logger->info (sprintf ("%d %s", scalar @entries, 
+    scalar @entries eq 1 ? "entries" : "entries"));
+
+## Actually printing the useful information
+if (! scalar @entries) { 
+    $logger->error ("no entries in table '$table'");
+    exit 0;
+} else { 
+    my $count = 0;
     foreach my $entry (@entries) { 
-        my $print = scalar $entry->print_text;
-        print $print;
+        my $print = scalar $entry->print;
+        printf ("%sEntry %d\n%s", ($count ? "\n" : ""), ++$count, $print);
         if ($DEBUG) {
-            my $debug = scalar $entry->debug_text;
-            if ($debug != $print) { print "\nRaw Data:\n$debug" }
+            my $debug = scalar $entry->debug_pretty;
+            if ($debug ne $print) { print "\nRaw Data:\n$debug" }
         }
     }
-} else {
-    print "No entries in table '$table'\n";
 }
     
 exit 0;
@@ -92,22 +80,12 @@ exit 0;
 ### Subroutines 
 ##############################################################################
 
-sub debug { warn "$0: @_\n" if $DEBUG }
-sub error { my $text = "@_"; chomp $text; die "$0: $text\n" }
 sub error_usage { 
     my ($error) = @_;
-    pod2usage (-exit_status => 2, -verbose => 1, -message => $error) 
+    my $logger = Remedy::Log->get_logger ();
+    $logger->error ($error);
+    pod2usage (-exit_status => 2, -verbose => 1);
 }
-
-### untaint (TEXT, MATCH)
-# Untaint user-offered data that is "safe enough", or die if it's not.
-sub untaint {
-    my ($text, $match) = @_;
-    $match ||= '[a-zA-Z0-9_./: -]*';
-    return '' unless defined $text;
-    if ($text =~ m%^($match)$%) { return $1 } 
-    else                        { error ("tainted data: '$text' ($match)") }
-}   
 
 ##############################################################################
 ### Documentation
@@ -132,14 +110,10 @@ database.
 
 =over 4
 
-=item B<-c> I<CONFIG>, B<--config> I<CONFIG>
-
-Loads the specified configuration file with B<Remedy::Config> instead of the
-default.
-
 =item B<-d>, B<--debug>
 
-Print debugging information, both within the 
+Print debugging information, both within this module and within the Remedy
+module.  Can be offered multiple times to increase debugging accordingly.
 
 =item B<-h>, B<--help>
 
@@ -151,19 +125,13 @@ Prints out the full help documentation and exits.
 
 =back
 
-=head1 FILES
-
-=over 4
-
-=item I</etc/remedy/config>
-
-Remedy configuration file, parsed by B<Remedy::Config>.  
-
-=back
-
 =head1 REQUIREMENTS
 
 B<Remedy>
+
+=head1 HOMEPAGE
+
+TBD.
 
 =head1 AUTHOR
 
@@ -171,6 +139,9 @@ Tim Skirvin <tskirvin@stanford.edu>
 
 =head1 LICENSE
 
-For Stanford internal use only.
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
+
+This program is free software; you may redistribute it and/or modify
+it under the same terms as Perl itself.
 
 =cut

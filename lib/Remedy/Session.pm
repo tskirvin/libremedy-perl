@@ -19,8 +19,8 @@ Remedy::Session
 
 =head1 DESCRIPTION
 
-Currently just a wrapper for B<Stanford::Remedy::Session>; please see that man
-page for details.
+Currently (mostly) a wrapper for B<Stanford::Remedy::Session>; please see that
+man page for details.
 
 =cut
 
@@ -31,6 +31,27 @@ page for details.
 use Stanford::Remedy::Session;
 
 our @ISA = qw/Stanford::Remedy::Session/;
+
+##############################################################################
+### Subroutines ##############################################################
+##############################################################################
+
+=head2 Subroutines 
+
+=over 4
+
+=item error ()
+
+Pulls the value of B<$ARS::ars_errstr>, and returns it (if it is defined) or 
+the string 'no ars error'.  
+
+=back
+
+=cut
+
+sub error {
+    return defined $ARS::ars_errstr ? $ARS::ars_errstr : '(no ars error)';
+}
 
 ##############################################################################
 ### Final Documentation ######################################################

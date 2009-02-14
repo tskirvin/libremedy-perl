@@ -32,6 +32,7 @@ use strict;
 use Class::Struct;
 use Date::Parse;
 use Exporter;
+use Lingua::EN::Inflect qw/inflect/;
 use Remedy::Form::Generic;  
 use Remedy::Form::Utility;
 use Remedy::Session::Form;
@@ -177,9 +178,9 @@ sub form {
     my @return;
     if (my $class = $REGISTER{$name}) {
         my @classes = ref $class ? @$class : $class;
-        $logger->debug (sprintf ("%d %s associated with '%s'", 
-            scalar @classes, scalar @classes == 1 ? 'class' 
-                                                  : 'classes', $name));
+        $logger->debug (inflect (sprintf 
+            ("NUM(%d) associated PL_N(class) PL_V(was) found for '%s'", 
+            scalar @classes, $name)));
         foreach (@classes) {
             my $table = $_->table;
             $logger->debug ("form for '$name' is '$_' (table '$table')");
@@ -194,7 +195,8 @@ sub form {
         $form->table ($name);
         push @return, $form;
     }
-    $logger->all (_plural (scalar @return, 'form', 'forms') . ' returned');
+    $logger->all (inflect (sprintf 
+        ("NUM(%d) PL_N(form) returned", scalar @return)));
     return @return;
 }
 
@@ -225,28 +227,12 @@ sub new {
     my ($class, %args) = @_;
     my $parent = $class->parent_or_die (%args, 
         'text' => 'need a Remedy parent object');
-    my $logger = $parent->logger_or_die;
-    my $session = $parent->session_or_die;
-
-    my $logger = $parent->config->logger;
+    my $logger  = $parent->logger_or_die;
 
     # Create the object
-    my $table = $args{'table'} || $class->error ('no table offered');
+    my $table = $args{'table'} || $logger->logdie ('no table offered');
 
-    my $obj = _init ($class, $parent, $table);
-
-    ## Generate the Remedy form
-    local $@;
-    my $form = $class->get_form ($session, $table);
-    if ($@) {
-        $@ =~ s/ at .*$//;
-        $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;
-        $logger->info ("no formdata for '$table': $@");
-        return;
-    }
-
-    $obj->remedy_form ($form);
-    return $obj;
+    return _init ($class, undef, $parent, $table);
 }
 
 sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
@@ -271,7 +257,7 @@ sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
 sub related_by_id {
     my ($self, $table, $field, $id, %args) = @_;
     my $parent = $self->parent_or_die;
-    my $logger = $parent->logger_or_die;
+    my $logger = $self->logger_or_die;
     unless ($table) {
         $logger->debug ('relate_by_id - no table offered');
         return;
@@ -300,55 +286,164 @@ sub get {
 
 =item set (FIELD, VALUE [, FIELD, VALUE [, FIELD, VALUE [...]]])
 
+Takes a number of I<FIELD>/I<VALUE> pairs 
+
 =cut
 
 sub set {
     my ($self, %fields) = @_;
-    my $form = $self->remedy_form;
+    my $form   = $self->remedy_form;
+    my $logger = $self->logger_or_die;
+    my $table  = $self->table;
+
+    my %todo;
+
+    my %href = $self->fields;
+
     foreach my $field (keys %fields) {
-        my $value = $self->human_to_data ($field, $fields{$field});
-        if (my $key = $self->key_field ($field)) {
-            $self->$key ($value);
+        unless (exists $href{$field}) {
+            return "no such field '$field' in '$table'";
         }
-        $self->remedy_form->set_value ($field, $value);
+
+        my $value = $fields{$field};
+        if (defined $value) { 
+            my $data = $self->human_to_data ($field, $value);
+            return "invalid value '$value' for '$field'" unless $data;
+            $todo{$field} = $data;
+        } else { 
+            $todo{$field} = undef
+        }
     }
-    return $self;
-}
 
-=item human_to_data (FIELD, VALUE)
+    
+    $logger->debug (sprintf ("setting fields: %s", join (', ', keys %todo)))
+        if scalar keys %todo;
 
-=cut
-
-sub human_to_data {
-    my ($self, $field, $value, %args) = @_;
-    if      ($self->field_is ('enum', $field, %args)) {
-        my %hash = reverse $self->field_to_values ($field, %args);
-        return defined $hash{$value} ? $hash{$value} 
-                                     : undef; 
-                                     # : '-1';            # will never match
-    } elsif ($self->field_is ('time', $field, %args)) {
-        return str2time ($value) || $value;
-    } else {
-        return $value;
+    foreach my $f (keys %todo) {
+        my $human = defined $todo{$f} ? $todo{$f} : 'INVALID';
+        $self->remedy_form->set_value ($f, $todo{$f});
+        if (my $key = $self->key_field ($f)) {
+            $self->$key ($todo{$f});
+        }
     }
+    
+    return;
 }
 
 =item data_to_human (FIELD, VALUE)
+
+Converts data stored in the database into a human-readable version.  
+
+=over 4
+
+=item enum
+
+Converts the integer value to the human-readable one stored in the database.
+
+=item time
+
+Converts the integer timedate value from the database into a human-readable
+date string, using B<format_date ()> (see B<Remedy::Form::Utility>).
+
+=item (all others)
+
+=back
 
 =cut
 
 sub data_to_human {
     my ($self, $field, $value) = @_;
-    return unless defined $value;
+    return unless (defined $value && defined $field);
+    my $logger = $self->logger_or_die;
+
+    my $human = undef;
     if      ($self->field_is ('enum', $field)) {
         my %hash = $self->field_to_values ($field);
-        return defined $hash{$value} ? $hash{$value} 
-                                     : '*BAD VALUE*';   # will be noticable
+        $human = defined $hash{$value} ? $hash{$value} 
+                                       : '*BAD VALUE*';
+
     } elsif ($self->field_is ('time', $field)) {
-        return $self->format_date ($value);
+        $human = $self->format_date ($value);
     } else {
-        return $value;
+        $human = $value;
     }
+
+    if ($value != $human) { 
+        $logger->all (sprintf ("d2h %s to %s", 
+            _printable ($value, 20), _printable ($human, 30)));
+    }
+    return $human;
+}
+
+
+=item human_to_data (FIELD, VALUE)
+
+Converts the human-readable version of I<VALUE> into the machine-parsable data
+version, based on the field I<FIELD>.  This has different options depending on
+the field type:
+
+=over 4
+
+=item enum
+
+Looks to end up with an integer value, corresponding to the potential values
+enumerated in the database, so we should look at those possible values for a
+match.  First attempts to convert I<VALUE> to its numeric value; if that fails,
+then we will see we already are a valid numeric value; and if *that* fails,
+then there is no valid data and we we will return undef.
+
+=item time
+
+Looks to end up with an integer corresponding to seconds-since-epoch.  If we
+are already an integer, we will just use that; otherwise, we will try to use 
+B<Date::Parse::str2time ()> to convert the string back to to the appropriate
+integer.  
+
+=item (all others)
+
+Just whatever we offered, there's no parsing to be done.
+
+=back
+
+Returns the parsed data, or undef on failure.
+
+=cut
+
+sub human_to_data {
+    my ($self, $field, $human) = @_;
+    return unless (defined $human && defined $field);
+    my $logger = $self->logger_or_die;
+
+    my $value = undef;
+    if      ($self->field_is ('enum', $field)) {
+        my %hash = reverse $self->field_to_values ($field);
+        if      (exists $hash{$human}) { 
+            $value = $hash{$human} 
+        } elsif (exists {reverse %hash}->{$human}) {
+            $value = $human;
+        } else { 
+            $logger->error ("invalid value for '$field': $human");
+            return;
+        }
+        $value = exists $hash{$human} ? $hash{$human} : $human;
+
+    } elsif ($self->field_is ('time', $field)) {
+        if      ($human =~ /^\d+/) {    # this is a 'time' string already
+            $value = $human;
+        } elsif (my $time = str2time ($human)) {
+            $value = $time;
+        } else {
+            $logger->error ("could not parse date string: '$human'");
+            return;
+        }
+
+    } else { $value = $human }
+
+    if ($value != $human) { 
+        $logger->all (sprintf ("h2d %s to %s", 
+            _printable ($human, 30), _printable ($value, 20)));
+    }
+    return $value;
 }
 
 =back
@@ -466,9 +561,9 @@ sub limit {
     if (my $id = $args{'ID'}) { return "'1' == \"$id\"" }
     if ($args{'all'}) { return '1=1' }
 
-    _args_trace ($logger, 'before limit_pre()', %args) if $logger->is_all;
+    _args_trace ($logger, 'before limit_pre()', %args);
     %args = $self->limit_pre (%args);
-    _args_trace ($logger, 'after  limit_pre()', %args) if $logger->is_all;
+    _args_trace ($logger, 'after  limit_pre()', %args);
 
     my @limit;
     if (my $extra = $args{'extra'}) { 
@@ -502,20 +597,14 @@ sub limit {
 
 sub reload {
     my ($self, $form) = @_;
-    $self->remedy_form ($form) if defined $form;
 
     # Set the per-object accessors
     my %map = $self->field_map;
     foreach my $key (keys %map) {
         my $field = $map{$key};
-        my $value = $self->data_to_human ($field, 
-            $self->remedy_form->get_value ($field));
-        $self->$key ($value);
-    }
-
-    # Make sure that any required fields are set at this point
-    foreach my $field ($self->field_required ()) {
-        return unless defined $self->$field;
+        my $value = defined $form ? $form->get_value ($field)
+                                  : $self->remedy_form->get_value ($field);
+        $self->$key ($self->data_to_human ($field, $value));
     }
 
     return $self;
@@ -529,32 +618,35 @@ If
 successful, reloads the newly-created item and returns it; on failure, sets an
 error in the parent object and returns an error.
 
-Note: this only inserts items, it doesn't update existing items.  You probably
-want to use B<save ()>!
+Returns an error message on failure, or undef on success.
 
 =cut
 
 sub save {
     my ($self, %args) = @_;
+    my $logger = $self->parent_or_die->logger_or_die;
 
     ## Make sure all data is reflected in the form
-    my $form = $self->remedy_form or $self->error ('no form');
+    my $form = $self->remedy_form or return 'no form';
 
-    ## Go through the key fields, and move data if necessary
-    my $keyhash = $self->key_field;
-    foreach my $key (keys %{$keyhash}) {
-        my $func = $$keyhash{$key};
-        my $value = $self->$func;
-        next unless defined $value;
-        $self->set ($key, $self->$func);
+    ## Make sure the data is consistent
+    $self->reload;
+
+    $logger->debug ("saving data from $form");
+
+    { 
+        local $@;
+        my $return = eval { $form->save };
+        unless ($return) { 
+            $logger->error ("could not save: $@");
+            return "could not save: $@";
+        }
     }
 
-    ## Write the data out
-    my $return = $form->save or return;
+    ## Once again make sure the data is consstent
+    $self->reload;
 
-    ## Reload the data
-    $self->reload () or return;
-    return $return;
+    return;
 }
 
 =item new_from_form (ENTRY, ARGHASH)
@@ -562,9 +654,8 @@ sub save {
 Takes information from I<ENTRY> - the output of a single item from a
 B<Remedy::select ()> call - and creates a new object in the appropriate class.
 
-Uses two functions - B<field_map ()>, to map fields to function names so we can
-actually move the information over, and B<field_required ()>, which lists the
-required fields so we know when we should fail for lack of enough information.
+Uses B<field_map ()> to map fields to function names so we can actually move
+the information over.
 
 =over 4
 
@@ -585,8 +676,8 @@ sub new_from_form {
     return unless ($form && ref $form);
     return unless (my $table = $args{'table'} || $self->table);
 
-    my $obj = _init ($class, $self->parent_or_die (%args), $table) || return;
-    return $obj->reload ($form);
+    return _init ($class, $form, $self->parent_or_die (%args), $table);
+    # return $obj->reload ($form);
 }
 
 =item read (PARENT, ARGHASH)
@@ -680,7 +771,7 @@ sub read {
     my $limit = join (" AND ", $self->limit (%args));
     return unless $limit;
 
-    my $logger = $parent->config->logger;
+    my $logger = $parent->logger;
 
     ## Perform the search
     $logger->debug ("read_where ($table, $limit)");
@@ -698,8 +789,8 @@ sub read {
     return wantarray ? @return : $return[0];
 }
 
-sub insert { shift->save (@_) }
-sub update { shift->save (@_) }
+sub insert { shift->save (@_) } # FIXME: check to make sure it's not already there
+sub update { shift->save (@_) } # FIXME: check to make sure it is already there
 sub delete { return }       # not yet written
 
 =item update (NEWOBJ, ARGHASH)
@@ -758,18 +849,6 @@ The default is an empty hash.
 =cut
 
 sub field_map        { () }
-
-=item field_required ()
-
-Returns an array of field accessors that must be filled in order to continue on
-B<new_from_form ()> - basically, this equates to the 'required' fields in the SQL
-databases.
-
-The default is an empty array.
-
-=cut
-
-sub field_required   { qw// }
 
 =item field_uniq ()
 
@@ -831,31 +910,28 @@ Defaults to ().
 =cut
 
 sub schema {
-    my ($self, %args) = @_;
-    my $formdata = $self->pull_formdata (%args);
+    my ($self) = @_;
+    my $formdata = $self->pull_formdata ();
     my $href = $formdata->get_fieldName_to_fieldId_href ();
     return reverse %{$href};
 }
 
 sub field_to_values {
-    my ($self, $field, %args) = @_;
-    my $formdata = $self->pull_formdata (%args);
+    my ($self, $field) = @_;
+    my $formdata = $self->pull_formdata ();
     my $href = $formdata->get_fieldName_to_enumvalues_href () or return;
     my $values = $href->{$field};
     return unless defined $values && ref $values;
     return %{$values};
 }
 
-# sub field_is_enum { shift->field_is ('enum', @_) }
-# sub field_is_time { shift->field_is ('time', @_) }
-
 =item field_is (TYPE, FIELD, ARGS)
 
 =cut
 
 sub field_is {
-    my ($self, $type, $field, %args) = @_;
-    return 1 if $self->field_type ($field, %args) eq lc $type;
+    my ($self, $type, $field) = @_;
+    return 1 if $self->field_type ($field) eq lc $type;
     return 0;
 }
 
@@ -966,8 +1042,6 @@ sub id_to_field { shift->schema->{shift} }
 
 =item parent_or_die (TEXT, COUNT, ARGHASH)
 
-=item session_or_die (ARGHASH)
-
 Takes an arguemnt hash I<ARGHASH> from a parent function.  If the 'parent'
 argument is in the argument hash, or if B<parent ()> is set, then return that;
 otherwise, die.
@@ -993,6 +1067,23 @@ sub parent_or_die  {
     }
 }
 
+=item session_or_die (ARGHASH)
+
+=item logger_or_die  (ARGHASH)
+
+=cut
+
+sub session_or_die { 
+    my ($self, %args) = @_;
+    $args{'count'}++;
+    $self->parent_or_die (%args)->session_or_die;
+}
+sub logger_or_die  { 
+    my ($self, %args) = @_;
+    $args{'count'}++;
+    $self->parent_or_die (%args)->logger_or_die;
+}
+
 =back
 
 =cut
@@ -1002,38 +1093,54 @@ sub parent_or_die  {
 ##############################################################################
 
 ### _args_trace (TEXT, ARGHASH)
-# [...]
+# If we're printing 'trace' level messages (really 'all'), then print off 
+# a nice version of the keys/values in ARGHASH, with a prequel TEXT.
 sub _args_trace {
     my ($logger, $text, %args) = @_;
     if ($logger->is_all) { 
         $logger->all ($text);
-        foreach (keys %args) { $logger->all ("  $_: $args{$_}"); }
+        foreach (keys %args) { 
+            $logger->all ("  $_: $args{$_}"); 
+        }
     }
 }
 
-
-### _init (PARENT, 
+### _init (CLASS, FORM, PARENT, TABLE)
 # Creates and initializes a new object, setting its parent and table fields
-# appropriately and going through field_map () to set the key_field entries.
-# Returns the object; failure cases generally lead to death.  
+# appropriately and going through the (optional).  FORM is either an object 
+# we just pulled from a read () call (which called new_from_form ()), or undef,
+# in which case we'll build a new one.  In either case, we'll set the session 
+# data of FORM to the session of the current PARENT.
 #
 # Used with new () and new_from_form ().
 
 sub _init {
-    my ($class, $parent, $table) = @_;
+    my ($class, $form, $parent, $table) = @_;
+    my $logger  = $parent->logger_or_die  ('count' => 1);
+    my $session = $parent->session_or_die ('count' => 1);
 
+    ## Define the form, and set the session appropriately
+    unless ($form) {
+        $logger->all ("initializing new '$table' object");
+        $form = $class->get_form ($session, $table);
+        if ($@) {
+            $@ =~ s/ at .*$//;
+            $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;
+            $logger->info ("no formdata for '$table': $@");
+            return;
+        }
+    }
+    $form->set_session ($session);
+
+    ## Build and populate the object
     my $obj = {};
     bless $obj, $class;
+    $obj->parent      ($parent);
+    $obj->table       ($table);
+    $obj->remedy_form ($form);
 
-    my %map = $class->field_map ();
-    foreach my $key (keys %map) {
-        $obj->key_field ($map{$key}, $key)
-    }
-
-    $obj->parent ($parent);
-    $obj->table  ($table);
-
-    return $obj;
+    ## Reload the object, so as to fill in the key values, and return it
+    return $obj->reload;
 }
 
 ### _limit_string (ID, FIELD, VALUE)
@@ -1049,17 +1156,26 @@ sub _limit_string {
 
     ## 'enum' fields
     if ($self->field_is ('enum', $field)) { 
-        my ($mod, $human) = ($value =~ /^([+-]?=?)(.*)$/);
+        my ($mod, $human) = ($value =~ /^([+-]?=?)?(.*)$/);
         my %hash = reverse $self->field_to_values ($field);
-        my $data = $hash{$human};
-        return '1=2' unless defined $data;
+
+        my $data;
+        if    ($human =~ /^\d+/)      { $data = $human        }
+        elsif (defined $hash{$human}) { $data = $hash{$human} }
+        else                          { return '1=3'          }
+
         return _limit_gt ($self, $id, $mod, $data);
 
     ## 'time' fields 
     } elsif ($self->field_is ('time', $field)) {
-        my ($mod, $timestamp) = ($value =~ /^([+-]?=?)(.*)$/);
-        my $time = str2time ($timestamp) || return '1=2';
-        return _limit_gt ($self, $id, $mod, $time);
+        my ($mod, $timestamp) = ($value =~ /^([+-]?=?)?(.*)$/);
+
+        my $data ;
+        if ($timestamp =~ /^\d+/)                { $data= $timestamp }
+        elsif (my $time = str2time ($timestamp)) { $data = $time     }
+        else                                     { return '1=2'      }
+
+        return _limit_gt ($self, $id, $mod, $data);
 
     ## all other field types
     } else {
@@ -1098,9 +1214,19 @@ sub _or_die {
     die "$fulltext\n";
 }
 
-sub _plural {
-    my ($count, $singular, $plural) = @_;
-    sprintf ("%d %s", $count, $count == 1 ? $singular : $plural);
+
+### _printable (STRING, LENGTH)
+#
+sub _printable {
+    my ($string, $length) = @_;
+    $string =~ s/\n/ /g;
+
+    my $format = "%${length}.${length}s";
+    if (length ($string) > $length) {
+        my $shorter = $length - 3;
+        $format = "%${shorter}.${shorter}s...";
+    }
+    return sprintf ($format, $string);
 }
 
 ##############################################################################

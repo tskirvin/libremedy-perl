@@ -9,16 +9,36 @@ Remedy - basic OO interface to the Remedy API
 =head1 SYNOPSIS
 
     use Remedy;
+    use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
 
-    my $config = Remedy::Config->load ($CONFIGFILE);
-    my $remedy = Remedy->connect ($config);
+    my $logger = get_logger ('');
+    my $remedy = eval { Remedy->connect ($CONFIG, 'debug' => $DEBUG) }
+        or $logger->logdie ("couldn't connect to database: $@");
+    $logger->logdie ($@) if $@;
 
-[...]
+    my $table = 'HPD:Help Desk';
+    $logger->info ("pulling data about $table");
+    foreach my $obj ($remedy->form ($table)) {
+        if (defined $obj) {
+            print scalar $obj->debug_table;
+            exit 0;
+        } else {
+            print "No information for '$table'; known values:\n";
+            foreach (sort $remedy->registered_classes) { print " * $_\n" }
+            exit 1;
+        }
+    }
 
 =head1 DESCRIPTION
 
-Remedy offers an object-oriented interface to the ARSPerl Remedy API, usable to
-read and modify tickets.
+Remedy offers a generic object-oriented interface to the ARSPerl Remedy
+API, to usable read and modify objects in the Remedy database.  
+
+This parent class is mostly just a wrapper to the functions that do the real
+work:  B<Remedy::Session>, which manages the connection to the database itself,
+and the B<Remedy::Form> family, which manages the database tables (forms) and
+their individual entries.  Configuration is provided through B<Remedy::Config>,
+and logging is provided through B<Remedy::Log>.
 
 =cut
 
@@ -30,8 +50,6 @@ use strict;
 use warnings;
 
 use Class::Struct;
-use Log::Log4perl qw/:easy/;
-use POSIX qw/strftime/;
 
 use Remedy::Config;
 use Remedy::Form;
@@ -40,8 +58,8 @@ use Remedy::Session;
 struct 'Remedy' => {
     'config'     => 'Remedy::Config',
     'error'      => '$',
-    'logger'     => 'Log::Log4perl::Logger',
     'formdata'   => '%',
+    'logobj'     => 'Remedy::Log',
     'session'    => 'Remedy::Session',
 };
 
@@ -55,32 +73,51 @@ struct 'Remedy' => {
 
 =over 4
 
-=item connect (CONFIG)
+=item connect (ARGHASH)
 
 Connects to the Remedy server, and creates a B<Remedy::Session> object.
 
-I<CONFIG> is either a B<Remedy::Config> object or a filename which we will load
-to create a new B<Remedy::Config> object.  
+Argument hash I<ARGHASH> accepts the following options:
+
+=over 4
+
+=item config I<CONFIG>
+
+I<CONFIG> is either a B<Remedy::Config> object or a filename which we will
+load to create a new B<Remedy::Config> object.  No default, which means that
+B<Remedy::Config> will try to find a file with its own logic; see
+B<Remedy::Config> for details.
+
+=item debug I<COUNT>
+
+Increases the debugging level for screen output by I<COUNT> levels, using
+B<Remedy::Log::more_logging ()>.  See B<Remedy::Log> for more details.
+
+=back
 
 =cut
 
 sub connect {
-    my ($class, $config, %args) = @_;
+    my ($class, %args) = @_;
     my $self = $class->new ();
 
     ## Load and store configuration information
+    my $config = $args{'config'};
     my $conf = ($config && ref $config) ? $config 
                                         : Remedy::Config->load ($config);
     $self->config ($conf);
 
     ## Get and save the logger
-    my $logger = $self->config->logger;
-    $self->logger ($logger);
+    $self->logobj ($self->config->log);
+    if (my $debug = $args{'debug'}) { $self->logobj->more_logging ($debug); }
+
+    ## From now on, we can print debugging messages when necessary
+    my $logger = $self->logger_or_die ('no logger at init');
 
     ## Gather basic information from the configuration file; there's more to 
     ## be had, but this is a good start.
-    my $host = $conf->remedy_host or die "\$REMEDY_HOST not set\n";
-    my $user = $conf->remedy_user or die "\$REMEDY_USER not set\n";
+    my $host = $conf->remedy_host or $logger->logdie ("\$REMEDY_HOST not set");
+    my $user = $conf->remedy_user or $logger->logdie ("\$REMEDY_USER not set");
 
     my %opts = ( 
         'password' => $conf->remedy_pass, 
@@ -90,18 +127,18 @@ sub connect {
     );
 
     ## Create and save the Remedy::Session object
+    $logger->debug ("creating remedy session to $host as $user");
     { 
         local $@;
-        $logger->debug ("creating remedy session to $host as $user");
         my $session = eval { Remedy::Session->new (%opts) } 
             or $logger->logdie ("couldn't create object: $@");
         $self->session ($session);
     }
 
     ## Actually connect to the Remedy server
+    $logger->debug ("connecting to remedy server at $host");
     { 
         local $@;
-        $logger->debug ("connecting to remedy server");
         my $ctrl = eval { $self->session->connect () };
         unless ($ctrl) { 
             $@ =~ s/ at .*$//;
@@ -211,6 +248,18 @@ only.  We might move or upgrade this later.
 
 sub registered_classes { Remedy::Form->registered }
 
+=item more_logging (COUNT)
+
+Increase the logging level to STDERR.
+
+=cut
+
+sub more_logging {
+    my ($self, $amount, @args) = @_;
+    my $log = $self->logobj || return;
+    $log->more_logging ($amount, @args);
+}
+
 =back
 
 =cut
@@ -229,7 +278,7 @@ sub registered_classes { Remedy::Form->registered }
 
 Configuration 
 
-=item logger (B<Remedy::Log>)
+=item log (B<Remedy::Log>)
 
 =item formdata (%)
 
@@ -245,22 +294,37 @@ Stores the actual connection
 
 =over 4
 
+=item logger ()
+
+Returns the actual B<Log::Log4perl::logger> object contained within the
+B<Remedy::Log> object.  Dies 
+
+=cut
+
+sub logger { shift->logobj_or_die->logger (@_) }
+
 =item config_or_die (TEXT)
 
 =item logger_or_die (TEXT)
 
+=item logobj_or_die (TEXT)
+
 =item session_or_die (TEXT)
 
-Like B<config ()>, B<logger ()>, or B<session (), but die with an error 
-(outside of the standard logging system) if the object is not yet set.  
-
-=back
+Like B<config ()>, B<logger ()>, B<logobj ()>, or B<session (), but die with   
+an error (outside of the standard logging system) if the object is not yet     
+set.                                                                           
 
 =cut
 
 sub config_or_die  { shift->_or_die ('config',  "no configuration", @_) }
+sub logobj_or_die  { shift->_or_die ('logobj',  "no logger",        @_) }
 sub logger_or_die  { shift->_or_die ('logger',  "no logger",        @_) }
 sub session_or_die { shift->_or_die ('session', "no session",       @_) }
+
+=back
+
+=cut
 
 ###############################################################################
 ### Internal Subroutines ######################################################

@@ -57,18 +57,21 @@ use strict;
 use warnings;
 
 use Class::Struct;
+use Lingua::EN::Inflect qw/inflect/;
 
 use Remedy;
 use Remedy::Ticket::Functions;
 
 use Remedy::Form::Audit;
 use Remedy::Form::Incident;
+use Remedy::Form::People;
 use Remedy::Form::Task;
 use Remedy::Form::TicketGen;
 use Remedy::Form::Time;
 use Remedy::Form::WorkLog;
 
-our @ISA = qw/Remedy/;
+our @ISA; 
+push @ISA, qw/Remedy/;
 
 Remedy::Form->register ('ticket', $FORM{'all'});
 
@@ -124,25 +127,72 @@ sub close {
 
 =cut
 
+## need to set 'Support Company', 'Support Organization', 'Owner Group',
+## 'Owner Group ID', 'Assignee'
 sub assign  {
-    my ($self, %args) = @_;
-    
+    my ($self, $number, %args) = @_;
+    my $logger = $self->logger_or_die;
+
+    my $group = $args{'group'};
+
+    my %toset;
+
+    if (my $user = defined $args{'user'}) { 
+        $toset{'Assignee'} = $user;
+    } elsif (exists $args{'user'}) {
+        $toset{'Assignee'} = undef;
+    }
+
+    if (my $group = defined $args{'group'}) {
+    } elsif (exists $args{'group'}) {
+    }
+
+    if (exists $args{'user'}) {
+        my $user = $args{'user'};
+        # $logger->
+        my %person_search = ('SUNET ID' => $user);
+        my @return = $self->read ('people', %person_search);
+        unless (scalar @return) { 
+            # $logg
+        }
+        $logger->logdie ("user '$user' does not belong to any groups")
+            unless scalar @return;
+        my @groups;
+        foreach (@return) { push @groups, $_->group }
+
+       # if (scalar @groups) {
+       #     push @text, "in all member groups of '$user'";
+       #     $hash{'groups'} = \@groups;
+       # }
+    }
+
+    my @tickets = $self->get ($number);
+    foreach my $tkt (@tickets) { 
+        
+    }
 }
 
-=item resolve ()
+=item resolve (NUMBER, TEXT)
 
 =cut
 
 sub resolve {
-    my ($self, $num, %args) = @_;
-    $self->set_status ('Resolved', %args);
+    my ($self, $number, $text, @rest) = @_;
+    return "no ticket number" unless $number;
+    return "no resolution text" unless $text;
+    return _run_on_tickets ($self, 'resolve', $number, $text, @rest);
 }
 
-=item status ()
+=item set_status ()
 
 =cut
 
-sub status { }
+sub set_status { 
+    my ($self, $number, $status, @rest) = @_;
+    return "no ticket number" unless $number;
+    return "no status offered" unless $status;
+    return _run_on_tickets ($self, 'set_status', $number, $status, @rest);
+}
 
 =item text (NUMBER, TYPE)
 
@@ -154,13 +204,14 @@ sub text {
 
     $type ||= '';
     my @list = qw/primary requestor assignee description resolution worklog/;
-    if    (lc $type eq 'debug')      { @list = qw/debug/           } 
-    elsif (lc $type eq 'audit')      { @list = qw/primary audit/   } 
-    elsif (lc $type eq 'worklog')    { @list = qw/primary worklog/ } 
-    elsif (lc $type eq 'timelog')    { @list = qw/primary timelog/ } 
-    elsif (lc $type eq 'summary')    { @list = qw/primary summary/ } 
-    elsif ($type =~ /^(all|full)$/i) { push @list, qw/audit time/  } 
-    else                             { push @list, qw/summary/     } 
+    if    (lc $type eq 'debug')      { @list = qw/debug/            } 
+    elsif (lc $type eq 'audit')      { @list = qw/primary audit/    } 
+    elsif (lc $type eq 'worklog')    { @list = qw/primary worklog/  } 
+    elsif (lc $type eq 'timelog')    { @list = qw/primary timelog/  } 
+    elsif (lc $type eq 'summary')    { @list = qw/primary summary/  } 
+    elsif (lc $type eq 'assign')     { @list = qw/primary assignee/ }
+    elsif ($type =~ /^(all|full)$/i) { push @list, qw/audit time/   } 
+    else                             { push @list, qw/summary/      } 
     $logger->debug ('text types: ' . join (', ', @list));
 
     local $@;
@@ -469,9 +520,58 @@ sub name {
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Internal Subroutines #####################################################
+##############################################################################
+
+sub _run_on_tickets {
+    my ($self, $func, $number, @args) = @_;
+    my $logger  = $self->logger_or_die;
+    my $session = $self->session_or_die;
+
+    $logger->debug ("getting tickets named '$number'");
+    my @tickets = $self->get ($number);
+    return "no matching ticket" unless scalar @tickets;
+    my $errors = 0;
+    foreach my $tkt (@tickets) { 
+        my $tktnumber = $tkt->number;
+        unless ($tktnumber) { 
+            $logger->error ("no ticket number, skipping");
+            $errors++;
+            next;
+        }
+        $logger->debug ("running '$func' on '$tktnumber'");
+
+        if (my $error = $tkt->$func (@args)) {
+            $logger->error ("error on '$func': $error");
+            $errors++;
+            next;
+        }
+
+        $logger->debug ("saving '$tktnumber'");
+
+        if (my $error = $tkt->save) { 
+            $logger->error ("could not save '$tktnumber': ", $session->error);
+            $errors++;
+        } else {
+            $logger->info ("successfully saved '$tktnumber'");
+            
+        }
+    }
+    
+    my $text = sprintf ("%s out of %s", 
+        inflect ("NUM($errors) PL_N(error)"),
+        inflect (sprintf ("NUM(%d) PL_N(ticket)", scalar @tickets)));
+    $logger->info ($text);
+    return $text if $errors;
+    return "$errors errors" if $errors;
+    return;
+}
+
+
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 

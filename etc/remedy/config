@@ -12,9 +12,13 @@ $REMEDY_PASS = 'P1c@550';
 ## Default criteria for queries and updates
 $COMPANY   = "Stanford University";
 $SUB_ORG   = "IT Services";
-$WORKGROUP = "ITS Unix Systems";
-$USERNAME  = "";
-$DOMAIN    = "stanford.edu",
+$WORKGROUP = "";
+
+## Additional information for output and reassignments
+$DOMAIN         = "stanford.edu",
+$HELPDESK       = "ITS Help Desk Level 2";
+$REPORT_SOURCE  = "Web Form HelpSU";
+
 
 ## Maximum number of entries to return on a search.
 $SEARCH_COUNT = 100;
