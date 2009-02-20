@@ -70,14 +70,9 @@ Empty.  Generic forms have no field maps.
 
 sub field_map { }
 
-=item table_human ()
-
-Returns the table name set at creation time.  Overrides the default function.
+=back
 
 =cut
-
-sub table_human { shift->table }
-
 
 ###############################################################################
 ### Final Documentation

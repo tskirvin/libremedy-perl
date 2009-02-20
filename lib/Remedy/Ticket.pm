@@ -543,7 +543,7 @@ sub _run_on_tickets {
         $logger->debug ("running '$func' on '$tktnumber'");
 
         if (my $error = $tkt->$func (@args)) {
-            $logger->error ("error on '$func': $error");
+            $logger->error ("$func: $error");
             $errors++;
             next;
         }

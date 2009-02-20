@@ -77,56 +77,31 @@ use Remedy::Form::WorkLog;
 
 =over 4
 
-=item close (TEXT)
+=item add_time (MINUTES, TEXT)
+
+=item add_worklog (TEXT)
+
+=item assign (USER, GROUP)
+
+=item list (TYPE)
+
+=item resolve (TEXT)
+
+=item set_status (STATUS)
 
 =cut
 
-sub resolve    { "not implemented" }
-sub set_status { "not implemented" }
-
-sub list {}
-sub assign {}
-sub ticket {}
-sub add_time {}
-sub add_worklog {}
-
-=item parse_ticket_number (NUMBER)
-
-Given I<NUMBER>, pads that into a valid incident number - that is, something
-that begins with either INC, TAS, or HD0, with a length of 15 characters.  If
-no such prefix is offered, we'll assume you want 'INC', as so:  
-
-  990977        INC000000990977
-
-Returns undef if nothing can be created.
-
-=cut
-
-=item requestor
-
-=cut
-
-
-sub close {
-    my ($self, $text, %args) = @_;
-    # $self->assign
-}
-
-=cut
-
-    $tktdata{'1000000156'} = $text;                 # 'Resolution'
-    $tktdata{'1000005261'} = time;                  # 'Resolution Date'
-    $tktdata{'7'}          = 4;                     # 'Status' = "Resolved"
-    $tktdata{'1000000215'} = 11000;                 # 'Reported Source'
-    $tktdata{'1000000150'} = 17000;                 # "No Further Action Required"
-    # Not doing 1000000642, "Time Spent"
-
-=cut
+sub add_time    { "not implemented" }
+sub add_worklog { "not implemented" }
+sub assign      { "not implemented" }
+sub list        { "not implemented" }
+sub resolve     { "not implemented" }
+sub set_status  { "not implemented" }
 
 =item get_incnum (ARGHASH)
 
-Finds the incident number for the current incident.  If we do not already
-have one set and stored in B<number ()>, then we will create one using
+Finds or creates the incident number for the current incident.  If we do not
+already have one set and stored in B<number ()>, then we will create one using
 B<Remedy::TicketGen ().
 
 =over 4

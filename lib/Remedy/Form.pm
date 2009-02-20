@@ -422,7 +422,7 @@ sub human_to_data {
         } elsif (exists {reverse %hash}->{$human}) {
             $value = $human;
         } else { 
-            $logger->error ("invalid value for '$field': $human");
+            $logger->debug ("invalid value for '$field': $human");
             return;
         }
         $value = exists $hash{$human} ? $hash{$human} : $human;
@@ -433,7 +433,7 @@ sub human_to_data {
         } elsif (my $time = str2time ($human)) {
             $value = $time;
         } else {
-            $logger->error ("could not parse date string: '$human'");
+            $logger->debug ("could not parse date string: '$human'");
             return;
         }
 
@@ -728,6 +728,16 @@ sub create {
 
 =over 4
 
+=item fields ()
+
+Returns an inverted version of B<schema ()> - that is, a hash with keys
+corresponding to the field names in this form, and values corresponding to
+their internal reference IDs.
+
+=cut
+
+sub fields { my %schema = shift->schema (@_);  return reverse %schema; }
+
 =item get_form (SESSION, TABLE_NAME)
 
 Given a working B<Remedy::Session> and the table name I<TABLE_NAME>, safely
@@ -744,7 +754,6 @@ B<Remedy::Form::Raw> or somesuch, we'll access that module here.
 sub get_form {
     my ($self, $session, $table) = @_;
     return unless (defined $session && defined $table);
-    no warnings;
     my $form = eval { Remedy::Session::Form->new ('session' => $session,
         'name' => $table) };
     if ($@) { return }
@@ -793,40 +802,19 @@ sub insert { shift->save (@_) } # FIXME: check to make sure it's not already the
 sub update { shift->save (@_) } # FIXME: check to make sure it is already there
 sub delete { return }       # not yet written
 
-=item update (NEWOBJ, ARGHASH)
+=item schema ()
 
-Attempts to update the database values for current object with the contents the
-new object I<NEWOBJ>.  First, runs the item through
-
-Returns a two-item array: the updated item (the old item if no changes were
-necessary, or undef if there was an error), and a hashref listing all changes
-that were made (or the string 'error' if there was an error).  In a scalar
-context, only returns the first item.
-
-Note: this only updates items, it doesn't insert new items.  You probably want
-to use B<register ()>!
+Returns a hash of field IDs and their human-readable names.  This is used by
+B<debug_text ()> to make a human-readable debug field, as well as by
+B<field_to_id ()> and B<id_to_field ()>.
 
 =cut
 
-sub update_old_check {
-    my ($self, $new, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
-
-    my %update = $self->diff ($new);
-    unless (scalar keys %update) { return wantarray ? ($self => {}) : $self }
-
-    my %uniq;
-    my %map = $self->field_map;
-    foreach my $func ($self->field_uniq) {
-        my $field = $map{$func};
-        $uniq{$field} = $self->$func;
-    }
-
-    unless (my $err = $self->update ($self->table, \%uniq, \%update)) {
-        return wantarray ? (undef => 'error' . $self->error) : undef;
-    } else {
-        return wantarray ? ($self => \%update) : $self;
-    }
+sub schema {
+    my ($self) = @_;
+    my $formdata = $self->pull_formdata ();
+    my $href = $formdata->get_fieldName_to_fieldId_href ();
+    return reverse %{$href};
 }
 
 =back
@@ -850,30 +838,10 @@ The default is an empty hash.
 
 sub field_map        { () }
 
-=item field_uniq ()
 
-Returns an array of field accessors that should be enough to select a "unique"
-entry, where nothing else should match it.
+=item limit_pre (ARGHASH)
 
-The default is 'id'.
-
-=cut
-
-sub field_uniq       { qw/id/ }
-
-=item fields ()
-
-Returns a hash containing field-name to field-content pairs - that is, 'ID' to
-'int', 'Status' to 'text', and 'CreateTime' to 'time'.  Used for B<select ()>.
-If you just want to get the field names, use B<keys $obj->fields>.
-
-The default is a reverse of the schema () hash.
-
-=cut
-
-sub fields { my %schema = shift->schema (@_);  return reverse %schema; }
-
-=item limit (ARGHASH)
+=item limit_post (ARGHASH)
 
 Returns a string that is used in B<select ()> functions and the like to limit
 the number of affected entries.  This can be over-ridden to allow for more
@@ -899,22 +867,10 @@ Defaults to use B<debug_pretty ()>.
 
 sub print { shift->debug_pretty (@_) }
 
-=item schema ()
 
-Returns a hash of field IDs and their human-readable names.  This is used by
-B<debug_text ()> to make a human-readable debug field, as well as by
-B<field_to_id ()> and B<id_to_field ()>.
-
-Defaults to ().
+=item field_to_values ()
 
 =cut
-
-sub schema {
-    my ($self) = @_;
-    my $formdata = $self->pull_formdata ();
-    my $href = $formdata->get_fieldName_to_fieldId_href ();
-    return reverse %{$href};
-}
 
 sub field_to_values {
     my ($self, $field) = @_;
@@ -925,7 +881,10 @@ sub field_to_values {
     return %{$values};
 }
 
-=item field_is (TYPE, FIELD, ARGS)
+=item field_is (TYPE, FIELD)
+
+Check to see if field I<FIELD> is of the type I<TYPE> (enum, time, char, etc).  
+Returns 1 if yes, 0 if no.
 
 =cut
 
@@ -935,13 +894,15 @@ sub field_is {
     return 0;
 }
 
-=item field_hash (FIELD, ARGS)
+=item field_type (FIELD)
+
+Returns the 
 
 =cut
 
 sub field_type {
     my ($self, $field, %args) = @_;
-    my $formdata = $self->pull_formdata (%args);
+    my $formdata = $self->pull_formdata ();
     my $href = $formdata->get_fieldName_to_datatype_href () or return;
     return lc $href->{$field};
 }
@@ -951,8 +912,8 @@ sub field_type {
 =cut
 
 sub pull_formdata {
-    my ($self, %args) = @_;
-    my $parent = $self->parent_or_die (%args);
+    my ($self) = @_;
+    my $parent = $self->parent_or_die;
 
     unless ($parent->formdata ($self->table)) {
         my $form = $self->get_form ($parent->session_or_die, $self->table) || return;
@@ -963,17 +924,6 @@ sub pull_formdata {
     return $parent->formdata ($self->table);
 }
 
-=item table_human
-
-=cut
-
-sub table_human {
-    my ($class) = @_;
-    my $table = $class;
-    $table =~ s/^Remedy::Form:://;
-    return $table;
-}
-
 =back
 
 =head2 Helper Functions
@@ -982,7 +932,6 @@ These functions are helpful either interally to this module, or might be useful
 for any additional functions offered by any sub-modules.
 
 =over 4
-
 
 sub fields_text {}
 
@@ -1013,20 +962,9 @@ sub diff {
     %update;
 }
 
-=item field_map_reverse ()
-
-Inverts B<field_map ()>.
-
-=cut
-
-sub field_map_reverse {
-    my %entries = reverse shift->field_map ();
-    return %entries;
-}
-
 =item field_to_id (FIELD)
 
-Converts the human-readable I<FIELD> to the numeric field ID, with B<schema ()>.
+Converts the human-readable I<FIELD> to its numeric field ID, with B<schema ()>.
 
 =cut
 
@@ -1034,7 +972,7 @@ sub field_to_id { shift->fields->{shift} }
 
 =item id_to_field (ID)
 
-Converts a numeric I<ID> to the human-readable field name, with B<schema ()>.
+Converts a numeric I<ID> to its human-readable field name, with B<schema ()>.
 
 =cut
 
@@ -1084,12 +1022,18 @@ sub logger_or_die  {
     $self->parent_or_die (%args)->logger_or_die;
 }
 
+sub config_or_die {
+    my ($self, %args) = @_;
+    $args{'count'}++;
+    $self->parent_or_die (%args)->config_or_die;
+}
+
 =back
 
 =cut
 
 ##############################################################################
-### Internal Subroutines
+### Internal Subroutines #####################################################
 ##############################################################################
 
 ### _args_trace (TEXT, ARGHASH)
@@ -1185,7 +1129,9 @@ sub _limit_string {
 }
 
 ### _limit_gt (ID, MOD, TEXT)
-# Escape TEXT first.
+# Makes a LIMIT string for integer comparisons.  ID should be the numeric field
+# ID, TEXT should be an integer as well, and MOD is the type of comparison
+# we're doing.
 sub _limit_gt {
     my ($self, $id, $mod, $text) = @_;
     return "'$id' <= $text" if $mod eq '-=';
@@ -1216,7 +1162,7 @@ sub _or_die {
 
 
 ### _printable (STRING, LENGTH)
-#
+# Make a nicelty printable version of a string, for debugging purposes.
 sub _printable {
     my ($string, $length) = @_;
     $string =~ s/\n/ /g;
@@ -1230,7 +1176,7 @@ sub _printable {
 }
 
 ##############################################################################
-### Final Documentation
+### Final Documentation ######################################################
 ##############################################################################
 
 =head1 REQUIREMENTS

@@ -108,7 +108,7 @@ sub format_email {
     my ($self, $name, $email) = @_;
     $name ||= "";
     if ($email) { 
-        $email .= '@' . $self->parent->config->domain unless $email =~ /@/;
+        $email .= '@' . $self->config_or_die->domain unless $email =~ /@/;
     } else { $email = "" }
     return $email ? "$name <$email>" : $name;
 }   
@@ -163,6 +163,5 @@ sub format_text_field {
 
     return wantarray ? @return : join ("\n", @return, '');   
 }
-
 
 1;
