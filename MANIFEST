@@ -5,13 +5,8 @@ debian/compat
 debian/control
 debian/copyright
 debian/rules
-etc/config
 etc/remctl/conf.d/remedy
 etc/remedy/config
-etc/remedy/local.conf
-etc/remedy/remedy.conf
-etc/remedy/schema.conf
-etc/schema
 lib/Remedy.pm
 lib/Remedy/Config.pm
 lib/Remedy/Form.pm
