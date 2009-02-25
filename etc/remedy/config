@@ -1,24 +1,22 @@
-#########################################################################
-### Stanford::Remedy Configuration 
-#########################################################################
-# $Id: remedy.conf 4522 2008-06-27 17:53:33Z tskirvin $
+###############################################################################
+### Remedy Configuration ######################################################
+###############################################################################
 
 ## Where is the server hosted, and how do we connect to it?
-$REMEDY_HOST = "r7-app1-prod";
+$REMEDY_HOST = "";
 $REMEDY_PORT = "7150";
-$REMEDY_USER = "svcunix";
-$REMEDY_PASS = 'P1c@550';
+$REMEDY_USER = "";
+$REMEDY_PASS = '';
 
 ## Default criteria for queries and updates
-$COMPANY   = "Stanford University";
-$SUB_ORG   = "IT Services";
+$COMPANY   = "";
+$SUB_ORG   = "";
 $WORKGROUP = "";
 
 ## Additional information for output and reassignments
-$DOMAIN         = "stanford.edu",
-$HELPDESK       = "ITS Help Desk Level 2";
-$REPORT_SOURCE  = "Web Form HelpSU";
-
+$DOMAIN         = "",
+$HELPDESK       = "";
+$REPORT_SOURCE  = "";
 
 ## Maximum number of entries to return on a search.
 $SEARCH_COUNT = 100;
