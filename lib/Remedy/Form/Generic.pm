@@ -8,24 +8,26 @@ Remedy::Form::Generic - generic remedy forms
 
 =head1 SYNOPSIS
 
-    use Remedy::Form;  # automatically loads Remedy::Form::Generic
+    use Remedy::Form::Generic;
 
     # $remedy is a Remedy object
     foreach my $obj ($remedy->read ('TABLENAME', 'option1' => 'value1',
         'option2' => 'value2', 'option3' => 'value3' )) {
         print scalar $obj->print_text;
-    }  
+    }
 
 =head1 DESCRIPTION
 
 Remedy::Form::Generic is used to look at forms in a "generic" manner, where all
-we know is the name of the form (eg I<CTM:People>).  It is both a sub-class of,
-and a helper class to, B<Remedy::Form>, so its functions are described there.
+we know is the name of the form (e.g. I<CTM:People>).
+
+Remedy::Form::Generic is both a special sub-class of, and a helper class to,
+B<Remedy::Form>.
 
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -37,10 +39,30 @@ use Remedy::Form;
 our @ISA = init_struct (__PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Class::Struct Functions ##################################################
 ##############################################################################
 
 =head1 FUNCTIONS
+
+=head2 B<Class::Struct> Accessors
+
+=over 4
+
+=item table (I<Table Name>)
+
+Unlike all other tables, the generic table can set the associated table name.
+
+=back
+
+=cut
+
+##############################################################################
+### Remedy::Form Overrides ###################################################
+##############################################################################
+
+=head2 B<Remedy::Form> Overrides
+
+=over 4
 
 =item init_struct ()
 
@@ -50,7 +72,7 @@ base class is 'Remedy::Form'.
 
 =cut
 
-sub init_struct {
+sub inet_struct {
     my ($class, %extra) = @_;
     our $new = $class . "::Struct";
 
@@ -64,7 +86,7 @@ sub init_struct {
 
 =item field_map ()
 
-Empty.  Generic forms have no field maps.
+Empty.
 
 =cut
 
@@ -74,9 +96,9 @@ sub field_map { }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 

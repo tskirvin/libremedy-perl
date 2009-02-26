@@ -198,11 +198,10 @@ Given the form I<FORM_NAME>, returns an appropriate
 
 sub read { 
     my ($self, $form_name, %args) = @_;
-
     my @return;
     foreach my $form ($self->form ($form_name)) {
         $self->logger_or_die->all (sprintf ("read (%s)", $form->table));
-        push @return, $form->read (%args);
+        push @return, $form->read ($form->table, %args);
     }
     return @return;
 }

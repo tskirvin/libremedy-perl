@@ -13,16 +13,17 @@ Remedy::Form::Group - Department form
     # $remedy is a Remedy object
     foreach (Remedy::Form::Group->read ('db' => $remedy, 'all' => 1)) {
         print scalar $_->print_text;
-    }  
+    }
 
 =head1 DESCRIPTION
 
-Remedy::Group manages the I<Group> form, which manages access privileges
-for groups of users.  It is a sub-class of B<Remedy::Form>, so most of its
-functions are described there.
+Remedy::Form::Group manages the I<Group> form in Remedy, which tracks user
+privilege groups.  
 
-Note that if you're looking for the support group mappings, you should see
-B<Remedy::SupportGroup>.
+Remedy::Form::Group is a sub-class of B<Remedy::Form>, registered as 'group'.
+
+Note that groups of users that are managing queues, for instance, are tracked
+with B<Remedy::SupportGroup>.
 
 =cut
 
@@ -54,21 +55,17 @@ Internal ID of the entry.
 
 =item name (I<Group Name>)
 
-Name of the group, ie 'Sub Administrator'
+e.g. 'Sub Administrator'
 
 =item summary (I<Long Group Name>)
 
-A short description of the group 
-
 =item description (I<Comments>)
-
-A longer, text description of the purpose of the group
 
 =back
 
 =cut
 
-sub field_map { 
+sub field_map {
     'id'          => 'Request ID',
     'name'        => 'Group Name',
     'summary'     => 'Long Group Name',
@@ -76,23 +73,26 @@ sub field_map {
 }
 
 ##############################################################################
-### Local Functions 
+### Remedy::Form Overrides ###################################################
 ##############################################################################
 
 =head2 B<Remedy::Form Overrides>
 
 =over 4
 
-=item print_text ()
+=item print ()
+
+Returns an array of formatted lines in an array context, or a single string
+separated with newlines in a scalar context.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self) = @_;
     my @return = "Group information for '" . $self->name. "'";
 
     push @return, $self->format_text_field (
-        {'minwidth' => 20, 'prefix' => '  '}, 
+        {'minwidth' => 20, 'prefix' => '  '},
         'Name'        => $self->name,
         'Summary'     => $self->summary,
         'Description' => $self->description,
@@ -111,9 +111,9 @@ sub table { 'Group' }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 
@@ -121,7 +121,7 @@ B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
-Remedy(8)
+Remedy(8), Remedy::Form::SupportGroup(8)
 
 =head1 HOMEPAGE
 

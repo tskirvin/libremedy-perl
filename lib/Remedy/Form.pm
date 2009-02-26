@@ -176,15 +176,15 @@ sub form {
     my $logger = $parent->logger_or_die;
 
     my @return;
-    if (my $class = $REGISTER{$name}) {
+    if (my $class = $REGISTER{lc $name}) {
         my @classes = ref $class ? @$class : $class;
         $logger->debug (inflect (sprintf 
             ("NUM(%d) associated PL_N(class) PL_V(was) found for '%s'", 
             scalar @classes, $name)));
-        foreach (@classes) {
-            my $table = $_->table;
-            $logger->debug ("form for '$name' is '$_' (table '$table')");
-            push @return, $_->new ('table' => $table, 'parent' => $parent);
+        foreach my $class (@classes) {
+            my $table = $class->table;
+            $logger->debug ("form for '$name' is '$class' (table '$table')");
+            push @return, $class->new ('table' => $table, 'parent' => $parent);
         }
     } else {
         $logger->debug ("creating a generic form for '$name'");
@@ -197,6 +197,21 @@ sub form {
     }
     $logger->all (inflect (sprintf 
         ("NUM(%d) PL_N(form) returned", scalar @return)));
+    return @return;
+}
+
+=item form_names ()
+
+=cut
+
+sub form_names {
+    my ($self, $name) = @_;
+    my @return;
+    if (my $array = $REGISTER{lc $name}) { 
+        foreach (@$array) { push @return, $_->table }
+    } else { 
+        push @return, $name 
+    }
     return @return;
 }
 
@@ -463,8 +478,6 @@ of B<parent ()> from the offered object as the parent.
 
 =back
 
-=back
-
 For all of these functions, if no parent is set then we will throw an
 exception.
 
@@ -479,7 +492,6 @@ Follows these arguments in the hash I<ARGHASH>:
 
 =over 4
 
-
 =item all I <anything>
 
 =item ID I<number>
@@ -493,8 +505,6 @@ Adds the components of I<arrayref> into the array of limit components.  This
 makes it easy to 
 
 =back
-
-=over 4
 
 =item enum
 
@@ -677,7 +687,6 @@ sub new_from_form {
     return unless (my $table = $args{'table'} || $self->table);
 
     return _init ($class, $form, $self->parent_or_die (%args), $table);
-    # return $obj->reload ($form);
 }
 
 =item read (PARENT, ARGHASH)
@@ -711,7 +720,7 @@ If invoked in a scalar context, only returns the first item.
 sub create {
     my ($self, %args) = @_;
     my $parent = $self->parent_or_die (%args);
-    my $form = $self->get_form ($parent->session_or_die, $self->table);
+    my $form = $self->remedy_session_form ($self->table);
     return $self->new_from_form ($form, 'table'  => $self->table, 
                                         'parent' => $parent);
 }
@@ -738,10 +747,12 @@ their internal reference IDs.
 
 sub fields { my %schema = shift->schema (@_);  return reverse %schema; }
 
-=item get_form (SESSION, TABLE_NAME)
+=item remedy_session_form (TABLE_NAME, ARGHASH)
 
-Given a working B<Remedy::Session> and the table name I<TABLE_NAME>, safely
-creates a B<Remedy::Session::Form> object safely - meaning that warnings are
+Creates and returns a B<Remedy::Session::Form> object associated with the table
+name I<TABLE_NAME>.
+
+safely - meaning that warnings are
 turned off temporarily and the whole block is run as an 'eval'.  Returns the
 object on success, or undef on failure; if there is an error message, it is
 returned as '$@'.
@@ -751,50 +762,66 @@ B<Remedy::Form::Raw> or somesuch, we'll access that module here.
 
 =cut
 
-sub get_form {
-    my ($self, $session, $table) = @_;
-    return unless (defined $session && defined $table);
+sub remedy_session_form {
+    my ($self, $table_name, %args) = @_;
+    my $session = $self->session_or_die (%args);
+    my $logger  = $self->logger_or_die  (%args);
+
+    return unless (defined $session && defined $table_name);
+
+    local $@;
     my $form = eval { Remedy::Session::Form->new ('session' => $session,
-        'name' => $table) };
-    if ($@) { return }
+        'name' => $table_name) };
+    if ($@) { 
+        $logger->debug ("no such form '$table_name' ($@)");
+        return;
+    } 
     return $form;
 }
 
-=item read ([...])
+=item read (TABLE, ARGHASH)
 
 
 =cut
 
 sub read {
-    my ($self, %args) = @_;
+    my ($self, $table, %args) = @_;
     my $parent = $self->parent_or_die ('need parent to read', 0, %args);
     my $session = $parent->session_or_die;
     my $logger  = $parent->logger_or_die;
-
-    my $table = $self->table || return;
-
-    $logger->all ("get_form ($session, $table)");
-    my $form = $self->get_form ($session, $table) || return;
-
-    ## Figure out how we're limiting our search
-    my $limit = join (" AND ", $self->limit (%args));
-    return unless $limit;
-
-    my $logger = $parent->logger;
-
-    ## Perform the search
-    $logger->debug ("read_where ($table, $limit)");
-    my @entries = $form->read_where ($limit);
-    $logger->debug (sprintf ("%d entr%s returned", scalar @entries, 
-        scalar @entries == 1 ? 'y' : 'ies'));
+    return unless $table;
 
     my @return;
-    foreach my $entry (@entries) {
-        $logger->debug (sprintf ("new_from_form (%s)", $table));
-        push @return, $self->new_from_form ($entry, 
-            'table' => $self->table, 'parent' => $parent);
+
+    my @forms = $self->form ($table);
+    unless (scalar @forms) { 
+        $logger->warn ("no matching tables for '$table'");
+        return;
     }
 
+    foreach my $form (@forms) { 
+        ## Figure out how we're limiting our search
+        my $limit = join (" AND ", $form->limit (%args));
+        unless ($limit) { 
+            $logger->debug ("no search limits, skipping");
+            next;
+        }
+
+        my $table_name = $form->table;
+        my $remedy_form = $self->remedy_session_form ($table_name);
+
+        ## Perform the search
+        $logger->debug ("read_where ($table_name, $limit)");
+        my @entries = $remedy_form->read_where ($limit);
+        $logger->debug (sprintf ("%d entr%s returned", scalar @entries, 
+            scalar @entries == 1 ? 'y' : 'ies'));
+
+        foreach my $entry (@entries) {
+            $logger->debug (sprintf ("new_from_form (%s)", $table));
+            push @return, $form->new_from_form ($entry, 
+                'table' => $self->table, 'parent' => $parent);
+        }
+    }
     return wantarray ? @return : $return[0];
 }
 
@@ -867,7 +894,6 @@ Defaults to use B<debug_pretty ()>.
 
 sub print { shift->debug_pretty (@_) }
 
-
 =item field_to_values ()
 
 =cut
@@ -916,7 +942,7 @@ sub pull_formdata {
     my $parent = $self->parent_or_die;
 
     unless ($parent->formdata ($self->table)) {
-        my $form = $self->get_form ($parent->session_or_die, $self->table) || return;
+        my $form = $self->remedy_session_form ($self->table) || return;
         my $formdata = $form->get_formdata;
         $parent->formdata ($self->table, $formdata);
     }
@@ -1065,8 +1091,8 @@ sub _init {
 
     ## Define the form, and set the session appropriately
     unless ($form) {
-        $logger->all ("initializing new '$table' object");
-        $form = $class->get_form ($session, $table);
+        $logger->all ("initializing new '$class' object");
+        $form = $class->remedy_session_form ($table, 'parent' => $parent);
         if ($@) {
             $@ =~ s/ at .*$//;
             $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;

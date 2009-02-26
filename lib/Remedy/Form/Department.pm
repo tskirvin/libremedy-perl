@@ -4,7 +4,7 @@ our $VERSION = "0.10";
 
 =head1 NAME
 
-Remedy::Department - Department form
+Remedy::Department - departments in remedy
 
 =head1 SYNOPSIS
 
@@ -17,14 +17,16 @@ Remedy::Department - Department form
 
 =head1 DESCRIPTION
 
-Remedy::Department manages the I<CTM:People Organization> form, which describes
-the organization chart down to the department level.  It is a sub-class of
-B<Remedy::Form>, so most of its functions are described there.
+Remedy::Department manages the I<CTM:People Organization> form in Remedy,
+which describes the organization chart down to the department level.  
+
+Remedy::Department is a sub-class of B<Remedy::Form>, registered as
+I<department>.
 
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -33,9 +35,10 @@ use warnings;
 use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
+Remedy::Form->register ('department', __PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Class::Struct Accessors ##################################################
 ##############################################################################
 
 =head1 FUNCTIONS
@@ -50,15 +53,15 @@ Internal ID of the entry
 
 =item company (I<Company>)
 
-Company name, ie I<Stanford University>
+e.g. I<Stanford University>
 
 =item organization (I<Organization>)
 
-Organization name, ie I<Vice President for Business Affairs>
+e.g. I<Vice President for Business Affairs>
 
 =item department (I<Department>)
 
-Department name, ie I<IT Services>
+e.g. I<IT Services>
 
 =back
 
@@ -72,18 +75,24 @@ sub field_map {
 }
 
 ##############################################################################
-### Local Functions 
+### Remedy::Form Overrides ###################################################
 ##############################################################################
 
 =head2 B<Remedy::Form Overrides>
 
 =over 4
 
-=item print_text ()
+=item print ()
+
+Formats information about the department, including the company name,
+organization name, and department name, as well as the entry's ID.
+
+Returns an array of formatted lines in an array context, or a single string
+separated with newlines in a scalar context.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self) = @_;
     my @return = "Department information for '" . $self->department . "'";
 
@@ -108,9 +117,9 @@ sub table { 'CTM:People Organization' }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 

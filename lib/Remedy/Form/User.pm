@@ -5,61 +5,75 @@ our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 
 =head1 NAME
 
-Remedy::User - ticket-generation table
+Remedy::Form::User - system accounts on remedy
 
 =head1 SYNOPSIS
 
-    use Remedy;
-    use Remedy::User;
+    use Remedy::Form::People;
 
-    [...]
+    # $remedy is a Remedy object
+    foreach my $user ($remedy->read ('user', 'all' => 1)) { 
+        print scalar $user->print;
+    }
 
 =head1 DESCRIPTION
 
-Remedy::User tracks [...] 
-It is a sub-class of B<Stanford::Packages::Form>, so
-most of its functions are described there.
+Remedy::User manages the I<User> form in Remedy, which tracks system accounts
+for the Remedy system - that is, accounts with usernames and passwords.  
+
+Remedy::User is a sub-class of B<Remedy::Form>, registered as 'user'.
+
+Note that users that actually use the system are tracked with
+B<Remedy::Form::People>.
 
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
 use warnings;
 
 use Remedy::Form qw/init_struct/;
-
 use Remedy::Form::People;
 
 our @ISA = init_struct (__PACKAGE__);
 Remedy::Form->register ('user', __PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Class::Struct Accessors ##################################################
 ##############################################################################
 
 =head1 FUNCTIONS
-
-These 
 
 =head2 B<Class::Struct> Accessors
 
 =over 4
 
-=item description ($)
+=item id (I<Request ID>)
 
-=item incnum ($)
+=item group_list (I<Group List>)
 
-=item submitter ($)
+Not currently parsed.
+
+=item name (I<Full Name>)
+
+=item netid (I<Login Name>)
 
 =back
 
 =cut
 
+sub field_map { 
+    'id'         => 'Request ID',
+    'group_list' => 'Group List',
+    'name'       => "Full Name",
+    'netid'      => "Login Name",
+}
+
 ##############################################################################
-### Local Functions 
+### Remedy::Form Overrides ###################################################
 ##############################################################################
 
 =head2 B<Remedy::Form Overrides>
@@ -68,19 +82,16 @@ These
 
 =item field_map
 
-=cut
+=item print ()
 
-sub field_map { 
-    'netid'      => "Login Name",
-    'name'       => "Full Name",
-    'group_list' => 'Group List',
-}
+Formats information about the user, including the name and network ID.
 
-=item name ()
+Returns an array of formatted lines in an array context, or a single string
+separated with newlines in a scalar context.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self) = @_;
     my $user = $self->netid;
     return unless $user;
@@ -92,15 +103,12 @@ sub print_text {
         {'minwidth' => 20, 'prefix' => '  '}, 
         'Full Name'   => $self->name,
         'SUNet ID'    => $self->netid || "(none)",
-        'Groups'      => scalar @groups || "(none)",    # should be the number of groups
     );
     foreach my $group (@groups) {
         push @return, "    $group"
     }
     return wantarray ? @return : join ("\n", @return, '');
 }
-
-sub groups { 0 }    # actually parse SGA to get this information
 
 =item table ()
 
@@ -112,9 +120,9 @@ sub table { 'User' }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 
@@ -122,7 +130,7 @@ B<Class::Struct>, B<Remedy::Form>
 
 =head1 SEE ALSO
 
-Remedy(8)
+Remedy(8), Remedy::Form::People(8)
 
 =head1 HOMEPAGE
 

@@ -4,30 +4,33 @@ our $VERSION = "0.10";
 
 =head1 NAME
 
-Remedy::Form::SupportGroup - 
+Remedy::Form::SupportGroup - groups of active users in Remedy
 
 =head1 SYNOPSIS
 
-    use Remedy::SupportGroup;
+    use Remedy::Form::SupportGroup;
 
     # $remedy is a Remedy object
-    foreach my $group (Remedy::SupportGroup->read ('db' => $remedy, 'all' => 1)) {
-        print scalar $group->print_text;
+    foreach my $group (Remedy::Form::SupportGroup->read ('db' => $remedy, 
+        'all' => 1)) {
+        print scalar $group->print;
     }  
 
 =head1 DESCRIPTION
 
-Remedy::Form::SupportGroup manages the I<SupportGroup> form, which manages
-access privileges for groups of users.  It is a sub-class of B<Remedy::Form>,
-so most of its functions are described there.
+Remedy::Form::SupportGroup manages the I<CTM:Support Group> form, which        
+manages small business units (at the "help desk" level, for instance).         
 
-Note that if you're looking for the regular group mappings, you should see
+Remedy::Form::SupportGroup is a sub-class of B<Remedy::Form>, registered as
+I<supportgroup>.
+
+Note that groups that have actual system privileges are managed with 
 B<Remedy::Form::Group>.
 
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -40,7 +43,7 @@ our @ISA = init_struct (__PACKAGE__);
 Remedy::Form->register ('supportgroup', __PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Class::Struct Functions ##################################################
 ##############################################################################
 
 =head1 FUNCTIONS
@@ -49,21 +52,18 @@ Remedy::Form->register ('supportgroup', __PACKAGE__);
 
 =over 4
 
-=item id (I<Request ID>)
+=item id (I<Support Group ID>)
 
 Internal ID of the entry.
 
-=item name (I<SupportGroup Name>)
+=item name (I<Support Group Name>)
 
-Name of the group, ie 'Sub Administrator'
+e.g. "ITS Help Desk Level 2"
 
-=item summary (I<Long SupportGroup Name>)
+=item email (I<Alternate Group Email Address>)
 
-A short description of the group 
-
-=item description (I<Comments>)
-
-A longer, text description of the purpose of the group
+An email address that gets sent copies of all unassigned work.  Usually set to
+a group email account, or a mail-to-news gateway, or something similar.
 
 =back
 
@@ -76,8 +76,19 @@ sub field_map {
 }
 
 ##############################################################################
-### Local Functions 
+### Local Functions ##########################################################
 ##############################################################################
+
+=head2 Local Functions 
+
+=over 4
+
+=item person ()
+
+Returns an array of all B<Remedy::Form::People> entries associated with this
+support group.  Uses B<sga ()>.
+
+=cut
 
 sub person {
     my ($self, @rest) = @_;
@@ -87,21 +98,44 @@ sub person {
     return @return;
 }
 
+=item sga ()
+
+Returns a list of support group associations (B<Remedy::Form::SGA> objects)
+that are associated with this support group.
+
+=cut
+
 sub sga {
     my ($self, @rest) = @_;
     return unless my $id = $self->id; 
     return $self->read ('Remedy::Form::SGA', 'Support Group ID' => $id, @rest);
 }
 
+=back
+
+=cut
+
+##############################################################################
+### Remedy::Form Overrides ###################################################
+##############################################################################
+
 =head2 B<Remedy::Form Overrides>
 
 =over 4
 
-=item print_text ()
+=item field_map ()
+
+=item print ()
+
+Formats information about the support group, including the group's name and
+email address, the number of members, and a list of those members.
+
+Returns an array of formatted lines in an array context, or a single string
+separated with newlines in a scalar context.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self) = @_;
     my @return = "Group information for '" . $self->name. "'";
 
@@ -128,17 +162,17 @@ sub table { 'CTM:Support Group' }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Form>
+B<Class::Struct>, B<Remedy::Form>, B<Remedy::Form::SGA>
 
 =head1 SEE ALSO
 
-Remedy(8)
+Remedy(8), Remedy::Form::People(8), Remedy::Form::Group(8)
 
 =head1 HOMEPAGE
 

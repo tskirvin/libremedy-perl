@@ -4,29 +4,29 @@ our $VERSION = "0.10";
 
 =head1 NAME
 
-Remedy::SGA - Support Group Association form
+Remedy::Form::SGA - association form between Support Groups and People
 
 =head1 SYNOPSIS
 
-    use Remedy::SGA;
+    use Remedy::Form::SGA;
 
     # $remedy is a Remedy object
-    foreach my $group (Remedy::SGA->read ('db' => $remedy, 'all' => 1)) {
-        print scalar $group->print_text;
+    foreach my $sga ($remedy->read ('sga', 'all' => 1)) {
+        print scalar $sga->print;
     }  
 
 =head1 DESCRIPTION
 
-Remedy::SGA manages the I<CTM:Support Group Association> form, which maps
-together users and support groups.  It is a sub-class of B<Remedy::Form>, so
-most of its functions are described there.
+Remedy::Form::SGA manages the I<CTM:Support Group Association> form in Remedy,
+which maps together B<Remedy::Form::SupportGroup> and B<Remedy::Form::People>.
 
-[...]
+Remedy::Form::SGA is a sub-class of B<Remedy::Form>, registered as I<sga> and
+I<supportgroupassociation>.
 
 =cut
 
 ##############################################################################
-### Declarations
+### Declarations #############################################################
 ##############################################################################
 
 use strict;
@@ -42,7 +42,7 @@ Remedy::Form->register ('sga', __PACKAGE__);
 Remedy::Form->register ('supportgroupassocation', __PACKAGE__);
 
 ##############################################################################
-### Class::Struct
+### Class::Struct ############################################################
 ##############################################################################
 
 =head1 FUNCTIONS
@@ -55,17 +55,23 @@ Remedy::Form->register ('supportgroupassocation', __PACKAGE__);
 
 Internal ID of the entry.
 
-=item person (I<Full NameName>)
-
-Locally stored name of the associated person, ie 'Tim Skirvin'.
-
 =item group_id (I<Support Group ID>)
 
-Internal ID of the associated group.  
+Internal ID of the associated support group (B<Remedy::Form::SupportGroup>).  
+
+=item login (I<Login ID>)
+
+Network ID of the associated person.  Set in the database for convenience; 
+business logic manages this, so don't try to set it.
+
+=item name (I<Full Name>)
+
+Full name of the associated person.  Again, a convenience offering in the
+database.
 
 =item person_id (I<Comments>)
 
-A longer, text description of the purpose of the group
+Internal ID of the associated person (B<Remedy::Form::People>).  
 
 =item role (I<Support Group Assocation Role>)
 
@@ -77,22 +83,25 @@ Not really sure, but it's populated and may be useful somehow.
 
 sub field_map { 
     'id'           => 'Support Group Association ID',
+    'group_id'     => 'Support Group ID',
     'login'        => "Login ID",
     'name'         => 'Full Name',
-    'group_id'     => 'Support Group ID',
     'person_id'    => 'Person ID',
     'role'         => 'Support Group Association Role',
 }
 
 ##############################################################################
-### Local Functions 
+### Local Functions ##########################################################
 ##############################################################################
 
-=head2 Associations 
+=head2 Local Functions
 
 =over 4
 
-=item group
+=item group ()
+
+Returns the B<Remedy::Form::SupportGroup> object associated with the ID saved
+in B<group_id ()>.
 
 =cut
 
@@ -104,6 +113,9 @@ sub group {
 
 =item person ()
 
+Returns the B<Remedy::Form::People> object associated with the ID saved in
+B<person_id ()>.  
+
 =cut
 
 sub person {
@@ -114,15 +126,30 @@ sub person {
 
 =back
 
+=cut
+
+##############################################################################
+### Remedy::Form Overrides ###################################################
+##############################################################################
+
 =head2 B<Remedy::Form Overrides>
 
 =over 4
 
-=item print_text ()
+=item field_map ()
+
+=item print ()
+
+Formats information about the support-group assocation, including the person's
+name and email address (based on B<login ()> and the email domain configured in
+B<Remedy::Config>), the group's name, and the role of the association.
+
+Returns an array of formatted lines in an array context, or a single string
+separated with newlines in a scalar context.
 
 =cut
 
-sub print_text {
+sub print {
     my ($self, @rest) = @_;
     my @return = "SGA information for '" . $self->name. "'";
 
@@ -148,13 +175,14 @@ sub table { 'CTM:Support Group Association' }
 
 =cut
 
-###############################################################################
-### Final Documentation
-###############################################################################
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
 
 =head1 REQUIREMENTS
 
-B<Class::Struct>, B<Remedy::Form>
+B<Class::Struct>, B<Remedy::Form>, B<Remedy::Form::SupportGroup>,
+B<Remedy::Form::People>
 
 =head1 SEE ALSO
 
