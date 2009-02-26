@@ -3,6 +3,7 @@ use ExtUtils::MakeMaker;
 opendir (SCRIPTS, 'bin') or die "couldn't open 'bin': $!\n";
 my @scripts = grep { /^[^\.]/ } readdir SCRIPTS;
 closedir SCRIPTS;
+map { s%^%bin/% } @scripts;
 
 WriteMakefile(
     NAME              => 'Remedy',
@@ -10,7 +11,7 @@ WriteMakefile(
     ABSTRACT_FROM     => "lib/Remedy.pm",
     dist              => { COMPRESS => 'gzip', SUFFIX => 'gz' },
     VERSION_FROM      => 'lib/Remedy.pm', 
-    EXE_FILES         => [ @scripts ],
+    EXE_FILES         => \@scripts,
     AUTHOR            => 'Tim Skirvin <tskirvin@stanford.edu>',
     PREREQ_PM         => { 
       'Stanford::Remedy'    => '0.12',
