@@ -1,4 +1,11 @@
-remedy-perl (1) intrepid UNRELEASED; urgency=low
+libremedy-perl (0.2) intrepid UNRELEASED; urgency=low
+
+  * Lots of documentation fixes and general updates.
+  * Ticket stuff and CMDB stuff split off into separate modules.
+
+ -- Tim Skirvin <tskirvin@stanford.edu>  Thu, 26 Feb 2009 15:03:26 -0800
+
+libremedy-perl (0.1) intrepid UNRELEASED; urgency=low
 
   * Converting to the name 'Remedy'
 
