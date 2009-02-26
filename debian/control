@@ -3,7 +3,7 @@ Section: perl
 Priority: extra
 Maintainer: Tim Skirvin <tskirvin@stanford.edu>
 Build-Depends: debhelper (>= 4)
-Build-Depends-Indep: perl, libars-perl, libstanford-remedy-perl, liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
+Build-Depends-Indep: rsync, perl, libars-perl, libstanford-remedy-perl, liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
 Standards-Version: 3.7.2
 
 Package: libremedy-perl
