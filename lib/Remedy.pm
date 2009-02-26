@@ -57,7 +57,6 @@ use Remedy::Session;
 
 struct 'Remedy' => {
     'config'     => 'Remedy::Config',
-    'error'      => '$',
     'formdata'   => '%',
     'logobj'     => 'Remedy::Log',
     'session'    => 'Remedy::Session',
@@ -277,7 +276,7 @@ sub more_logging {
 
 Configuration 
 
-=item log (B<Remedy::Log>)
+=item logobj (B<Remedy::Log>)
 
 =item formdata (%)
 
@@ -310,7 +309,7 @@ sub logger { shift->logobj_or_die->logger (@_) }
 
 =item session_or_die (TEXT)
 
-Like B<config ()>, B<logger ()>, B<logobj ()>, or B<session (), but die with   
+Like B<config ()>, B<logger ()>, B<logobj ()>, or B<session ()>, but die with   
 an error (outside of the standard logging system) if the object is not yet     
 set.                                                                           
 

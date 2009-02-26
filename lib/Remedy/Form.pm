@@ -153,6 +153,14 @@ sub register {
     return $class;
 }
 
+=item registered ()
+
+Returns an array of registered classes.
+
+=cut
+
+sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
+
 =item form (FORM_NAME, ARGHASH)
 
 Finds the appropriate sub-class to manage the sub-form I<FORM_NAME>.
@@ -249,8 +257,6 @@ sub new {
 
     return _init ($class, undef, $parent, $table);
 }
-
-sub registered { grep { lc $_ ne 'generic' } keys %REGISTER }
 
 =back
 
@@ -716,6 +722,11 @@ If invoked in a scalar context, only returns the first item.
 
 =cut
 
+=item create (ARGHASH)
+
+[...]
+
+=cut
 
 sub create {
     my ($self, %args) = @_;
@@ -825,8 +836,28 @@ sub read {
     return wantarray ? @return : $return[0];
 }
 
+=item insert ()
+
+Just calls B<save ()>
+
+=cut
+
 sub insert { shift->save (@_) } # FIXME: check to make sure it's not already there
+
+=item update ()
+
+Just calls B<save ()>
+
+=cut
+
 sub update { shift->save (@_) } # FIXME: check to make sure it is already there
+
+=item delete ()
+
+Not yet written.
+
+=cut
+
 sub delete { return }       # not yet written
 
 =item schema ()
@@ -959,8 +990,6 @@ for any additional functions offered by any sub-modules.
 
 =over 4
 
-sub fields_text {}
-
 =item diff (OBJECT)
 
 Finds the differences between the parent object and the passed-in object
@@ -1034,6 +1063,11 @@ sub parent_or_die  {
 =item session_or_die (ARGHASH)
 
 =item logger_or_die  (ARGHASH)
+
+=item config_or_die  (ARGHASH)
+
+Pulls the sessin, logger, and config data (respectively) from the parent
+session.  Actually calls B<parent_or_die ()> to do it.
 
 =cut
 

@@ -143,6 +143,10 @@ These fields can be initialized via B<new ()> or per-function.
 
 =over 4
 
+=item new ()
+
+Creates a new object.  
+
 =item file ($)
 
 Filename for file output.  Corresponds to I<$FILE>.
@@ -208,7 +212,6 @@ with default options.
 sub init {
     my ($self, %args) = @_;
     $self = $self->new unless ref $self;
-
 
     $self->level      ($LOGLEVEL)      unless defined $self->level;
     $self->level_file ($LOGLEVEL_FILE) unless defined $self->level_file;

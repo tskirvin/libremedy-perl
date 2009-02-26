@@ -72,7 +72,7 @@ base class is 'Remedy::Form'.
 
 =cut
 
-sub inet_struct {
+sub init_struct {
     my ($class, %extra) = @_;
     our $new = $class . "::Struct";
 

@@ -82,6 +82,8 @@ sub field_map {
 
 =over 4
 
+=item field_map ()
+
 =item print ()
 
 Formats information about the department, including the company name,

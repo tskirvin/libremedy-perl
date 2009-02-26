@@ -12,4 +12,6 @@ if ($@) {
     print "ok 1 # skip - Test::Pod::Coverage 1.00 required for testing POD\n";
     exit;
 }
-all_pod_coverage_ok();
+all_pod_coverage_ok(
+    { trustme => [ qw/new/ ] }
+);

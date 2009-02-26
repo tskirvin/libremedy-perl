@@ -212,7 +212,6 @@ struct 'Remedy::Config' => {
     %opts, 
 };
 
-
 ##############################################################################
 ### Subroutines ##############################################################
 ##############################################################################
@@ -223,6 +222,42 @@ struct 'Remedy::Config' => {
 
 The accessors listed in CONFIGURATION can be initialized via B<new ()> or
 per-function.
+
+=over 4
+
+=item company ($)
+
+=item config ($)
+
+=item count ($)
+
+=item domain ($)
+
+=item helpdesk ($)
+
+=item log ($)
+
+=item logfile ($)
+
+=item loglevel ($)
+
+=item loglevel_file ($)
+
+=item remedy_host ($)
+
+=item remedy_pass ($)
+
+=item remedy_port ($)
+
+=item remedy_user ($)
+
+=item sub_org ($)
+
+=item workgroup ($)
+
+=item wrap ($)
+
+=back
 
 =head2 Additional Functions
 
