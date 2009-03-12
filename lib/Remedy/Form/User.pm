@@ -1,6 +1,5 @@
 package Remedy::Form::User;
 our $VERSION = "0.12";
-our $ID = q$Id: Remedy.pm 4743 2008-09-23 16:55:19Z tskirvin$;
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -18,10 +17,11 @@ Remedy::Form::User - system accounts on remedy
 
 =head1 DESCRIPTION
 
-Remedy::User manages the I<User> form in Remedy, which tracks system accounts
-for the Remedy system - that is, accounts with usernames and passwords.  
+Remedy::Form::User manages the I<User> form in Remedy, which tracks system
+accounts for the Remedy system - that is, accounts with usernames and
+passwords.
 
-Remedy::User is a sub-class of B<Remedy::Form>, registered as 'user'.
+Remedy::Form::User is a sub-class of B<Remedy::Form>, registered as 'user'.
 
 Note that users that actually use the system are tracked with
 B<Remedy::Form::People>.

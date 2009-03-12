@@ -87,12 +87,6 @@ Manages the database table name for each object; contains values like
 I<CTM:Person>.  Note that most B<Remedy::Form::*> sub-modules override this
 function, making it read-only.
 
-=item key_field (%)
-
-A map of function names to fields, pulled from the per-module B<field_map ()>
-function.  This is used to convert data back and forth between the per-object
-B<Class::Struct> accessors (see below) and their database representations.
-
 =item (per-object B<Class::Struct> accessors) ($)
 
 Adds one accessor of type '$' for each key from the B<field_map ()> function.
@@ -130,8 +124,7 @@ sub init_struct {
     foreach (keys %map) { $fields{$_} = '$' }
     struct $new => {'remedy_form' => 'Remedy::Session::Form',
                     'parent'      => 'Remedy',
-                    'table'       => '$',
-                    'key_field'   => '%', %extra, %fields};
+                    'table'       => '$', %extra, %fields};
 
     ## Register the class names
     __PACKAGE__->register ($class, $class);
@@ -139,6 +132,17 @@ sub init_struct {
     if (my $table = $class->table) { __PACKAGE__->register ($table, $class) }
 
     return (__PACKAGE__, $new);
+}
+
+=item key_field (FIELD)
+
+=cut
+
+sub key_field { 
+    my ($self, $field) = @_;
+    my %map = reverse $self->field_map;
+    return $map{$field} if defined $map{$field};
+    return;
 }
 
 =item register ()
@@ -193,6 +197,7 @@ sub form {
             my $table = $class->table;
             $logger->debug ("form for '$name' is '$class' (table '$table')");
             push @return, $class->new ('table' => $table, 'parent' => $parent);
+            last if wantarray;
         }
     } else {
         $logger->debug ("creating a generic form for '$name'");
@@ -205,7 +210,10 @@ sub form {
     }
     $logger->all (inflect (sprintf 
         ("NUM(%d) PL_N(form) returned", scalar @return)));
-    return @return;
+    return unless scalar @return;
+    return @return if wantarray;
+    $logger->debug ("returning first item");
+    return $return[0];
 }
 
 =item form_names ()
@@ -266,12 +274,11 @@ sub new {
 ### Accessors ################################################################
 ##############################################################################
 
-
 =head2 Accessors
 
 =over 4
 
-=item related_by_id (TABLE, ID, ARGHASH)
+=item related_by_id (TABLE, FIELD, ID, ARGHASH)
 
 =cut
 
@@ -280,15 +287,54 @@ sub related_by_id {
     my $parent = $self->parent_or_die;
     my $logger = $self->logger_or_die;
     unless ($table) {
-        $logger->debug ('relate_by_id - no table offered');
+        $logger->debug ('related_by_id - no table offered');
         return;
     }
     unless ($id) {
-        $logger->debug ('relate_by_id - no ID offered');
+        $logger->debug ('related_by_id - no ID offered');
         return;
     }
     $logger->debug (sprintf ("read (%s, %s => %s)", $table, $field, $id));
     return $parent->read ($table, $field => $id, %args);
+}
+
+=item remedy_to_key ()
+
+=cut
+
+sub remedy_to_key {
+    my ($self, $init) = @_;
+    $self->logger_or_die->all ("pushing remedy form values into key fields");
+
+    my $form = $self->remedy_form;
+    # Set the per-object accessors
+    my %map = $self->field_map;
+    foreach my $key (keys %map) {
+        my $field = $map{$key};
+        my $value = $self->data_to_human ($field, $form->get_value ($field));
+        $self->logger_or_die->all ("setting key '$key' to '$value'");
+        $self->$key ($value);
+    }
+
+    return $self;
+}
+
+=item key_to_remedy ()
+
+=cut
+
+sub key_to_remedy {
+    my ($self) = @_;
+    $self->logger_or_die->all ("pushing key values into remedy form");
+
+    # Set the per-object accessors
+    my %map = $self->field_map;
+    foreach my $key (keys %map) {
+        my $field = $map{$key};
+        my $value = $self->$key;
+        $self->set ($field, $self->$key);
+    }
+    return $self;
 }
 
 =item get (FIELD)
@@ -329,21 +375,24 @@ sub set {
         my $value = $fields{$field};
         if (defined $value) { 
             my $data = $self->human_to_data ($field, $value);
-            return "invalid value '$value' for '$field'" unless $data;
+            return "invalid value '$value' for '$field'" unless defined $data;
             $todo{$field} = $data;
         } else { 
             $todo{$field} = undef
         }
     }
 
-    
-    $logger->debug (sprintf ("setting fields: %s", join (', ', keys %todo)))
-        if scalar keys %todo;
+    return unless scalar keys %todo;
 
+    $logger->debug (sprintf ("setting fields: %s", join (', ', keys %todo)));
+
+    my %map = $self->field_map;
     foreach my $f (keys %todo) {
-        my $human = defined $todo{$f} ? $todo{$f} : 'INVALID';
+        my $human = defined $todo{$f} ? $todo{$f} : '(BLANK)';
+        $logger->all ("setting value of  '$f' to '$human'");
         $self->remedy_form->set_value ($f, $todo{$f});
         if (my $key = $self->key_field ($f)) {
+            $logger->all ("setting key_field '$f' to '$human'");
             $self->$key ($todo{$f});
         }
     }
@@ -465,6 +514,21 @@ sub human_to_data {
             _printable ($human, 30), _printable ($value, 20)));
     }
     return $value;
+}
+
+sub values {
+    my ($self, $field) = @_;
+    
+    if      ($self->field_is ('enum', $field)) {
+        my %hash = reverse $self->field_to_values ($field);
+        return keys %hash;
+        
+    } elsif ($self->field_is ('date', $field)) {
+        return "date: must be an integer (secs-since-epoch) or a date";
+    } else {
+        my $type = $self->field_type ($field);
+        return "$type: all values are valid";
+    }
 }
 
 =back
@@ -607,25 +671,6 @@ sub limit {
     @limit;
 }
 
-=item reload ([FORM])
-
-=cut
-
-sub reload {
-    my ($self, $form) = @_;
-
-    # Set the per-object accessors
-    my %map = $self->field_map;
-    foreach my $key (keys %map) {
-        my $field = $map{$key};
-        my $value = defined $form ? $form->get_value ($field)
-                                  : $self->remedy_form->get_value ($field);
-        $self->$key ($self->data_to_human ($field, $value));
-    }
-
-    return $self;
-}
-
 =item save (ARGHASH)
 
 Attempts to save the contents of this object into the database.
@@ -640,16 +685,15 @@ Returns an error message on failure, or undef on success.
 
 sub save {
     my ($self, %args) = @_;
-    my $logger = $self->parent_or_die->logger_or_die;
+    my $logger = $self->logger_or_die;
 
     ## Make sure all data is reflected in the form
     my $form = $self->remedy_form or return 'no form';
 
-    ## Make sure the data is consistent
-    $self->reload;
+    ## Load key data into main remedy form
+    $self->key_to_remedy;
 
     $logger->debug ("saving data from $form");
-
     { 
         local $@;
         my $return = eval { $form->save };
@@ -660,7 +704,7 @@ sub save {
     }
 
     ## Once again make sure the data is consstent
-    $self->reload;
+    $self->remedy_to_key;
 
     return;
 }
@@ -695,45 +739,28 @@ sub new_from_form {
     return _init ($class, $form, $self->parent_or_die (%args), $table);
 }
 
-=item read (PARENT, ARGHASH)
-
-Reads from the database in the B<Remedy> object I<PARENT>, based on the
-arguments in the argument hash I<ARGHASH>:
-
-=over 4
-
-=item count I<count_ref>
-
-How many entries to return.  No default.
-
-=item limit I<limit_ref>
-
-Which entries to select.  If I<limit_ref> is offered, it is used; otherwise,
-all items in the argument hash are passed to B<limit ()> to make an appropriate
-array.
-
-=back
-
-Returns an array of objects, created with B<new_from_form ()>. Please see
-Remedy::Database(8) for more details on the B<select ()> call used
-to gather the data.
-
-If invoked in a scalar context, only returns the first item.
-
-=cut
-
-=item create (ARGHASH)
+=item create (TABLE, ARGHASH)
 
 [...]
 
 =cut
 
 sub create {
-    my ($self, %args) = @_;
+    my ($self, $table, %args) = @_;
+    return unless $table;
+
     my $parent = $self->parent_or_die (%args);
-    my $form = $self->remedy_session_form ($self->table);
-    return $self->new_from_form ($form, 'table'  => $self->table, 
-                                        'parent' => $parent);
+    my $logger = $self->logger_or_die ();
+
+    $logger->debug ("pulling form information about '$table'");
+    my $form = $self->form ($table);
+
+    $logger->debug ("getting remedy session form for " . $form->table);
+    my $rem_form = $self->remedy_session_form ($form->table);
+
+    $logger->debug ("new_from_form ()");
+    return $form->new_from_form ($rem_form, 'table'  => $form->table, 
+                                            'parent' => $parent);
 }
 
 =back
@@ -790,8 +817,30 @@ sub remedy_session_form {
     return $form;
 }
 
-=item read (TABLE, ARGHASH)
+=item read (PARENT, ARGHASH)
 
+Reads from the database in the B<Remedy> object I<PARENT>, based on the
+arguments in the argument hash I<ARGHASH>:
+
+=over 4
+
+=item count I<count_ref>
+
+How many entries to return.  No default.
+
+=item limit I<limit_ref>
+
+Which entries to select.  If I<limit_ref> is offered, it is used; otherwise,
+all items in the argument hash are passed to B<limit ()> to make an appropriate
+array.
+
+=back
+
+Returns an array of objects, created with B<new_from_form ()>. Please see
+Remedy::Database(8) for more details on the B<select ()> call used
+to gather the data.
+
+If invoked in a scalar context, only returns the first item.
 
 =cut
 
@@ -833,7 +882,13 @@ sub read {
                 'table' => $self->table, 'parent' => $parent);
         }
     }
-    return wantarray ? @return : $return[0];
+    if (wantarray) { 
+        $logger->all ("returning all " . scalar @return . " object(s)");
+        return @return;
+    } else {
+        $logger->all ("returning first object of " . scalar @return);
+        return $return[0];
+    }
 }
 
 =item insert ()
@@ -1132,6 +1187,9 @@ sub _init {
             $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;
             $logger->info ("no formdata for '$table': $@");
             return;
+        } elsif (!$form) { 
+            $logger->info ("no formdata for '$table'");
+            return;
         }
     }
     $form->set_session ($session);
@@ -1144,7 +1202,7 @@ sub _init {
     $obj->remedy_form ($form);
 
     ## Reload the object, so as to fill in the key values, and return it
-    return $obj->reload;
+    return $obj->remedy_to_key;
 }
 
 ### _limit_string (ID, FIELD, VALUE)

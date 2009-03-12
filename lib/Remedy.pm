@@ -186,12 +186,14 @@ sub create {
     my ($self, $form_name, @args) = @_;
     $self->logger_or_die->all ("create ($form_name)");
     return $self->form ($form_name, @args);
-    # return $self->_doit ('create', 1, @_) 
 }
 
 =item read (FORM_NAME, ARGHASH)
 
 Given the form I<FORM_NAME>, returns an appropriate 
+
+If invoked in an array context, returns all entries; if invoked as a scalar,
+only returns the first entry.
 
 =cut
 
@@ -201,8 +203,9 @@ sub read {
     foreach my $form ($self->form ($form_name)) {
         $self->logger_or_die->all (sprintf ("read (%s)", $form->table));
         push @return, $form->read ($form->table, %args);
+        last if (! wantarray && scalar @return);
     }
-    return @return;
+    return wantarray ? @return : $return[0];
 }
 
 =item update (FORM_NAME, [...])
@@ -245,6 +248,22 @@ only.  We might move or upgrade this later.
 =cut
 
 sub registered_classes { Remedy::Form->registered }
+
+=item values (FORM_NAME, FIELD)
+
+Lists the valid values for 
+
+=cut
+
+sub values {
+    my ($self, $form_name, $field) = @_;
+    my @return;
+    
+    foreach my $form ($self->form ($form_name)) {
+        push @return, $form->values ($field);
+    }
+    return @return;
+}
 
 =item more_logging (COUNT)
 
