@@ -3,11 +3,11 @@ Section: perl
 Priority: extra
 Maintainer: Tim Skirvin <tskirvin@stanford.edu>
 Build-Depends: debhelper (>= 4)
-Build-Depends-Indep: rsync, perl, libars-perl, libstanford-remedy-perl, liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
+Build-Depends-Indep: rsync, perl, libars-perl, libstanford-remedy-perl (>= 0.13), liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
 Standards-Version: 3.7.2
 
 Package: libremedy-perl
 Architecture: all
-Depends: perl, libars-perl, libstanford-remedy-perl, liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
+Depends: perl, libars-perl, libstanford-remedy-perl (>= 0.13), liblingua-en-inflect-perl, libtimedate-perl, liblog-log4perl-perl
 Description: Stanford Remedy Tools for the Unix Team
  Scripts for the Unix Team to work with the Remedy ticketing system.
