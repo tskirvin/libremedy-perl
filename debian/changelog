@@ -1,9 +1,10 @@
-libremedy-perl (0.3) UNRELEASED; urgency=low
+libremedy-perl (0.3) lenny; urgency=low
 
   * Took out taint mode on all scripts, after figuring out how broken
     it was.
   * Lots of miscellaneous fixes and updates, after actually getting 
     libremedy-ticket-perl to work.
+  * Actual release
 
  -- Tim Skirvin <tskirvin@stanford.edu>  Thu, 12 Mar 2009 13:05:18 -0700
 
