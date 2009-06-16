@@ -251,7 +251,7 @@ sub init {
 
     my $level = $self->level_file >= $self->level ? $self->level_file
                                                   : $self->level;
-    $logger->all ('set global appender level to' . $level);
+    $logger->all ('set global appender level to ' . $level);
     $logger->level ($level);
     $self->logger ($logger);
 }
@@ -381,10 +381,10 @@ where possible, and handle everything in a fairly object-oriented manner; but
 the default methods may be more appropriate, and are certainly more powerful.
 So this decision may be revisited later.
 
-You may also note that there are all sorts of other issues to worry about, such as
-whether to print duplicate copies of a 'die' call at the script-level, or what
-the actual format of the log messages is.  I've tried to set sensible defaults
-and leave it at that; please refer to the man pages for more details.
+You may also note that there are all sorts of other issues to worry about,
+such as whether to print duplicate copies of a 'die' call at the script-level,
+or what the actual format of the log messages is.  I've tried to set sensible
+defaults and leave it at that; please refer to the man pages for more details.
 
 =head1 REQUIREMENTS
 
