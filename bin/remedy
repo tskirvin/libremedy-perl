@@ -27,6 +27,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use Remedy;
+use Remedy::Form::Error;
 use Remedy::Form::People;
 
 $0 =~ s%.*/%%g;     # Lose the annoying path information
@@ -107,6 +108,39 @@ if (lc $query eq 'table') {
         }
     }
 
+} elsif (lc $query eq 'error') {
+
+    my @errors;
+    foreach my $code (@rest) {
+        $logger->info ("finding info for error code '$code'");
+        my %search = ('Message Number' => $code);
+        my @entries = $remedy->read ('Remedy::Form::Error', %search);
+        if (! scalar @entries) {
+            print "No information for code '$code'\n";
+            next;
+        }
+        $logger->info (sprintf ("%d %s", scalar @entries, 
+            scalar @entries eq 1 ? "entries" : "entries"));
+        push @errors, @entries;
+    }
+
+    ## Actually printing the useful information
+    if (! scalar @errors) { 
+        $logger->error ("no matching errors");
+        exit 1;
+    } else { 
+        my $count = 0;
+        foreach my $entry (@errors) { 
+            my $print = scalar $entry->print;
+            print $print;
+            if ($DEBUG) {
+                my $debug = scalar $entry->debug_pretty;
+                if ($debug ne $print) { print "\nRaw Data:\n$debug" }
+            }
+        }
+    }
+
+
 } elsif (lc $query eq 'help') {
     pod2usage (-verbose => 2, -exit_status => 0, -noperldoc => 1);
 
@@ -142,6 +176,8 @@ B<remedy> table I<TABLE>
 B<remedy> userinfo I<USERNAME>
 
 B<remedy> groupinfo I<GROUPNAME>
+
+B<remedy> error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
 
 B<remedy> --help
 
@@ -189,6 +225,11 @@ support groups.
 
 Prints information about the support group I<GROUPNAME>, including the group
 name, its associated email addresses, and a count and listing of its members.
+
+=item error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
+
+Prints information about the error code I<ERROR_CODE> (many can be offered).
+Uses B<Remedy::Form::Error>.
 
 =item help
 
@@ -261,7 +302,7 @@ Remedy configuration file, parsed by B<Remedy::Config>.
 
 =head1 REQUIREMENTS
 
-B<Remedy>, B<Remedy::Form::People>
+B<Remedy>, B<Remedy::Form::People>, B<Remedy::Form::Error>
 
 =head1 SEE ALSO
 
