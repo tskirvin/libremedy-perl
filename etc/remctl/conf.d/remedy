@@ -1,2 +1,2 @@
 # /etc/remctl/conf.d/remedy
-remedy ALL /usr/bin/remedy /etc/remctl/acl/operations
+remedy ALL   /usr/bin/remedy /etc/remctl/acl/operations

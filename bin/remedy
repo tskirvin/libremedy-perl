@@ -142,6 +142,9 @@ if (lc $query eq 'table') {
 
 
 } elsif (lc $query eq 'help') {
+    pod2usage (-verbose => 1, -exit_status => 0, -noperldoc => 1);
+
+} elsif (lc $query eq 'man') {
     pod2usage (-verbose => 2, -exit_status => 0, -noperldoc => 1);
 
 } else { error_usage ("invalid query type: '$query'") }
@@ -173,13 +176,15 @@ remedy - prints information about the Remedy database
 
 B<remedy> table I<TABLE>
 
+B<remedy> error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
+
 B<remedy> userinfo I<USERNAME>
 
 B<remedy> groupinfo I<GROUPNAME>
 
-B<remedy> error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
+B<remedy> help
 
-B<remedy> --help
+B<remedy> man
 
 =head1 DESCRIPTION
 
@@ -205,7 +210,7 @@ Prints out the full help documentation and exits.
 
 =back
 
-=head2 MODES
+=head1 ARGUMENTS
 
 =over 4
 
@@ -214,6 +219,11 @@ Prints out the full help documentation and exits.
 Pulls and prints information about the table described in the perl module
 I<TABLE>.  Loads the module first, so that we can load arbitrary installed
 modules.
+
+=item error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
+
+Prints information about the error code I<ERROR_CODE> (many can be offered).
+Uses B<Remedy::Form::Error>.
 
 =item userinfo I<USERNAME>
 
@@ -226,14 +236,13 @@ support groups.
 Prints information about the support group I<GROUPNAME>, including the group
 name, its associated email addresses, and a count and listing of its members.
 
-=item error I<ERROR_CODE> [I<ERROR_CODE> I<ERROR_CODE> I<...>]
-
-Prints information about the error code I<ERROR_CODE> (many can be offered).
-Uses B<Remedy::Form::Error>.
-
 =item help
 
 Prints a basic help message and exits.
+
+=item man
+
+Prints a more complete help message and exits.
 
 =back
 
@@ -241,19 +250,10 @@ Prints a basic help message and exits.
 
 =over 4
 
-=item B<-c> I<CONFIG>, B<--config> I<CONFIG>
-
-Loads the specified configuration file with B<Remedy::Config> instead of the
-default.
-
-=item <-d>, B<--debug>
+=item B<-d>, B<--debug>
 
 Print debugging information, both within this module and within the Remedy
 module.  Can be offered multiple times to increase debugging accordingly.
-
-=item B<--group> I<GROUP>
-
-Sets the group that we'll use with the I<groupinfo> query.  No default.
 
 =item B<-h>, B<--help>
 
@@ -262,11 +262,6 @@ Prints out the synopsis information and exits.
 =item B<--man>
 
 Prints out the full help documentation and exits.
-
-=item B<--user> I<USER>
-
-Sets the user to run the I<userinfo> query about.  Defaults to
-$ENV{'REMOTE_USER'} (if set by remctl) or $ENV{'USER'} (if set by
 
 =back
 

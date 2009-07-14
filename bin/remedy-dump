@@ -99,7 +99,7 @@ remedy-dump - print all information from a Remedy table
 
 B<remedy-dump> I<TABLE>
 
-B<remedy> --help
+B<remedy-dump> --help
 
 =head1 DESCRIPTION
 

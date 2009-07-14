@@ -339,11 +339,19 @@ sub key_to_remedy {
 
 =item get (FIELD)
 
+[...]
+
 =cut
 
 sub get {
     my ($self, $field) = @_;
     my $form = $self->remedy_form || $self->error ('no form');
+
+    unless ($self->validate ($field)) {
+        $self->logger_or_die->info ("invalid field: $field");
+        return;
+    }
+
     if (my $key = $self->key_field ($field)) {
         return $self->$key;
     } else {
@@ -365,12 +373,8 @@ sub set {
 
     my %todo;
 
-    my %href = $self->fields;
-
     foreach my $field (keys %fields) {
-        unless (exists $href{$field}) {
-            return "no such field '$field' in '$table'";
-        }
+        return "no such field '$field'" unless $self->validate ($field);
 
         my $value = $fields{$field};
         if (defined $value) { 
@@ -398,6 +402,20 @@ sub set {
     }
     
     return;
+}
+
+=item validate (FIELD)
+
+Returns 1 if there is a valid field 'FIELD', 0 otherwise.
+
+=cut
+
+sub validate {
+    my ($self, $field) = @_;
+    my %href = $self->fields;
+    return 1 if exists $href{$field};
+    $self->logger_or_die->info ("invalid field: $field");
+    return 0;
 }
 
 =item data_to_human (FIELD, VALUE)
@@ -641,9 +659,9 @@ sub limit {
     if (my $id = $args{'ID'}) { return "'1' == \"$id\"" }
     if ($args{'all'}) { return '1=1' }
 
-    _args_trace ($logger, 'before limit_pre()', %args);
+    _args_trace ($logger, 'before limit_pre ()', %args);
     %args = $self->limit_pre (%args);
-    _args_trace ($logger, 'after  limit_pre()', %args);
+    _args_trace ($logger, 'after  limit_pre ()', %args);
 
     my @limit;
     if (my $extra = $args{'extra'}) { 
@@ -689,11 +707,12 @@ sub save {
 
     ## Make sure all data is reflected in the form
     my $form = $self->remedy_form or return 'no form';
+    my $class = $self->table;
 
     ## Load key data into main remedy form
     $self->key_to_remedy;
 
-    $logger->debug ("saving data from $form");
+    $logger->debug ("saving data in $class");
     { 
         local $@;
         my $return = eval { $form->save };
