@@ -254,6 +254,8 @@ sub init {
     $logger->all ('set global appender level to ' . $level);
     $logger->level ($level);
     $self->logger ($logger);
+
+    return $self;
 }
 
 ## Initialize default logging

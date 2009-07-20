@@ -18,19 +18,42 @@ page for details.
 =cut
 
 ##############################################################################
+### Configuration ############################################################
+##############################################################################
+
+## Used with get_formdata
+our %FORM_CACHE = ();
+
+##############################################################################
 ### Declarations #############################################################
 ##############################################################################
 
 use warnings;
 use strict;
 
-use Class::Struct;              # not using this yet; soon?
+use Class::Struct;
 use Date::Parse qw/str2time/;
 use Remedy::Log;
-use Stanford::Remedy::Form;     # hoping to kill this off
-use Stanford::Remedy::FormData;
+use Remedy::Session::Cache;
+use Remedy::Session::Form::Data;
+use Remedy::Utility qw/or_die/;
+use Stanford::Remedy::Form;         # hoping to kill this off shortly
 
-our @ISA = qw/Stanford::Remedy::Form/;
+# our @ISA = qw/Remedy::Form::Struct/;
+our @ISA = qw/Remedy::Session::Form::Struct Stanford::Remedy::Form/;
+
+struct 'Remedy::Session::Form::Struct' => {
+    'cache'       => 'Remedy::Session::Cache',
+    'fields_only' => '%',
+    'formdata'    => 'Remedy::Session::Form::Data',
+    'logger'      => 'Log::Log4perl::Logger',
+    'name'        => '$',
+    'populated'   => '$',
+    'session'     => 'Remedy::Session',
+    'select_qry'  => '$',
+    'select_res'  => '@',
+    'values'      => '%',
+};
 
 ##############################################################################
 ### Subroutines ##############################################################
@@ -42,13 +65,70 @@ This module overrides several subroutines, and adds several others.
 
 =over 4
 
+=item new (ARGHASH)
+
+
+=cut
+
+sub new {
+    my ($proto, %args) = @_;
+    my $class = ref $proto || $proto;
+    my $self = Remedy::Session::Form::Struct->new (%args);
+    bless $self, $class;
+
+    return unless $self->name;
+    return unless $self->session;
+
+    ## Get the logger
+    my $log = $self->logger || Remedy::Log->get_logger;
+    my $logger = $self->logger ($log);
+
+    my $values = $args{'values_href'} || {};
+    $self->values ($values);
+
+    my $only   = $args{'only_these_fieldNames_href'} || {};
+    $self->fields_only (%$only);
+
+    $self->select_qry ($args{'select_qry'} || undef);
+
+    my $results = $args{'select_qry_results'} || [];
+    $self->select_res (@$results);
+
+    # if ($args{'caching_enabled'}) {
+        $self->cache (Remedy::Session::Cache->new);
+    # }
+
+    $self->populate if $self->session;
+
+    return $self;
+}
+
+
+sub get_formdata {
+    my ($self) = @_;
+    my $name    = $self->name_or_die;
+    my $session = $self->get_session;
+
+    if (!(exists $FORM_CACHE{$name}) && $session) {
+        # my $formdata = Stanford::Remedy::FormData->new (
+        my $formdata = Remedy::Session::Form::Data->new (
+            'name'    => $name,
+            'session' => $session,
+            'cache'   => $self->cache,
+            'logger'  => $self->logger_or_die,
+        );
+        $FORM_CACHE{$name} = $formdata;
+    }
+    return $FORM_CACHE{$name};
+}
+
 =item insert ()
 
 =cut
 
 sub insert {
     my ($self) = @_;
-    my $logger = Remedy::Log->get_logger;
+    my $logger = $self->logger_or_die;
 
     # The Remedy Perl API wants all the fields to be saved in an array in
     # (field_id, value) pairs. So, we need to traverse all the nonempty
@@ -81,8 +161,8 @@ sub insert {
 
 sub update {
     my ($self) = @_;
-    my $logger = Remedy::Log->get_logger;
-    
+    my $logger = $self->logger_or_die;
+
     my $req_id = $self->get_request_id;
     $logger->logdie ('cannot insert without request ID') unless $req_id;
 
@@ -90,7 +170,7 @@ sub update {
     my $values   = $self->get_values_href;
 
     my @fields = ();
-    foreach my $name ($self->fields_to_match) { 
+    foreach my $name ($self->fields_to_match) {
         my $id = $self->name_to_id ($name);
         next unless $id;
         push (@fields, $id, $values->{$name});
@@ -101,7 +181,7 @@ sub update {
     $logger->logdie ("failed to update existing entry: $@") unless $rv;
 
     # Re-read to make sure all of the workflow has fired.
-    unless (my $rid = $self->read_into) { 
+    unless (my $rid = $self->read_into) {
         $logger->logdie ("could not re-read object into self: $@");
     }
 
@@ -122,6 +202,82 @@ sub save {
                                  : $self->insert (@args);
 }
 
+=cut
+
+TODO
+
+    sub CreateEntry
+    sub SetEntry
+sub as_string
+sub clone
+sub convert_fieldIds_to_fieldNames
+sub convert_fieldName_to_fieldId
+sub execute_select_qry
+sub find_where
+sub from_xml
+    sub get_cache
+sub get_caching_enabled
+sub get_ctrl
+sub get_enum_value
+sub get_formdata
+    sub get_name
+sub get_nowarn
+sub get_only_these_fieldNames_href
+sub get_populated
+sub get_request_id
+sub get_select_qry
+sub get_select_qry_results
+sub get_session
+sub get_value
+sub get_values_href
+        sub initialize
+    sub insert
+    sub new
+    sub populate
+sub populate_with_hash
+sub read
+    sub read_into
+    sub read_where
+    sub save
+    sub set_cache
+sub set_caching_enabled
+sub set_enum_value
+    sub set_name
+sub set_only_these_fieldNames_href
+sub set_populated
+sub set_request_id
+sub set_select_qry
+sub set_select_qry_results
+sub set_session
+sub set_value
+sub set_values_href
+sub to_xml
+sub trim
+    sub update
+
+=cut
+
+sub populate {
+    my ($self) = @_;
+    my $name    = $self->name_or_die ("cannot populate without a name");
+    my $session = $self->session_or_die;
+
+    # Now that we have a name, see if the global hash %FORM_CACHE has the data
+    # for this schema yet. If not, populate it now.
+    if (!$FORM_CACHE{$name}) {
+        warn "S: $session\n";
+        my $formdata = Remedy::Session::Form::Data->new (
+            'name'    => $name,
+            'session' => $session,
+            'cache'   => $self->cache || {},
+            'logger'  => $self->logger_or_die,
+        );
+        $FORM_CACHE{$name} = $formdata;
+    }
+
+    return $self->populated (1);
+}
+
 =item read_into ([QUERY])
 
 Populates the existing object based on a B<read (QUERY)>.
@@ -137,7 +293,7 @@ returns the Request ID.
 sub read_into {
     my ($self, @rest) = @_;
     my $logger  = $self->logger_or_die;
-    my $session = $self->get_session;
+    my $session = $self->session;
 
     my @results = $self->read (@rest);
 
@@ -149,6 +305,7 @@ sub read_into {
             $logger->logdie ($error);
         } else {
             $logger->debug ('no matches on read_into ()');
+            return;
             # We do nothing.
         }
     } else {
@@ -160,7 +317,7 @@ sub read_into {
     }
 
     # Add back the session
-    $self->set_session ($session);
+    $self->session ($session);
 
     return $self->get_request_id;
 }
@@ -243,8 +400,8 @@ sub read_where_session {
         $qualifier, 0, 0, \@ids_to_return, 1, 1);
 
     ## If we got no results, see if there's an error
-    if (!@results && $ARS::ars_errstr) { 
-        $logger->logdie ("$ARS::ars_errstr\n") 
+    if (!@results && $ARS::ars_errstr) {
+        $logger->logdie ("$ARS::ars_errstr\n")
     }
 
     ## The array @results contains an array of (request_id, values) pairs,
@@ -269,13 +426,12 @@ sub read_where_session {
     return @objects;
 }
 
-sub logger { Remedy::Log->get_logger }
-
-sub logger_or_die   { _or_die (shift->logger,       "no logger",   @_) }
-sub session_or_die  { _or_die (shift->get_session,  "no session",  @_) }
-sub ctrl_or_die     { _or_die (shift->get_ctrl,     "no ctrl",     @_) }
-sub name_or_die     { _or_die (shift->get_name,     "no name",     @_) }
-sub formdata_or_die { _or_die (shift->get_formdata, "no formdata", @_) }
+sub cache_or_die    { _or_die (shift->cache,    "no cache",    @_) }
+sub logger_or_die   { _or_die (shift->logger,   "no logger",   @_) }
+sub session_or_die  { _or_die (shift->session,  "no session",  @_) }
+sub ctrl_or_die     { _or_die (shift->ctrl,     "no ctrl",     @_) }
+sub name_or_die     { _or_die (shift->name,     "no name",     @_) }
+sub formdata_or_die { _or_die (shift->formdata, "no formdata", @_) }
 
 =item fields_to_match ()
 
@@ -329,7 +485,7 @@ sub SetEntry {
                                   'ARG_LIST' => \@args);
         $logger->debug ('SetEntry end   (remctl)');
         return $return;
-    } 
+    }
 
     my $ctrl = $self->ctrl_or_die;
 
@@ -383,7 +539,7 @@ sub CreateEntry {
         my @forms = $new->read_where ($where_clause);
         my $count = scalar @forms;
         $logger->logdie ("no entries found after creation\n") unless $count;
-        $logger->logdie ("too many entries found ($count) after creation\n") 
+        $logger->logdie ("too many entries found ($count) after creation\n")
             if ($count > 1);
 
         $request_id = $forms[0]->get_request_id;
@@ -444,8 +600,8 @@ sub ids_to_names {
 
     my @names;
     my $id_to_name_href = $formdata->get_fieldId_to_fieldName_href;
-    foreach my $id (@ids) { 
-        my $name = $id_to_name_href->{$id} || $self->logger_or_die->logdie 
+    foreach my $id (@ids) {
+        my $name = $id_to_name_href->{$id} || $self->logger_or_die->logdie
             ("no field name corresponding to '$id'\n");
         push @names, $name;
     }
@@ -454,7 +610,7 @@ sub ids_to_names {
 
 =item name_to_id (NAME)
 
-=item names_to_ids (NAME [, NAME [, NAME [...]]]) 
+=item names_to_ids (NAME [, NAME [, NAME [...]]])
 
 =cut
 
@@ -462,16 +618,24 @@ sub name_to_id { @{names_to_ids(@_)}[0]; }
 sub names_to_ids {
     my ($self, @names) = @_;
     my $formdata = $self->formdata_or_die;
-    
+
     my @ids = ();
     my $name_to_id_href = $formdata->get_fieldName_to_fieldId_href;
-    foreach my $name (@names) { 
-        my $id = $name_to_id_href->{$name} || $self->logger_or_die->logdie 
+    foreach my $name (@names) {
+        my $id = $name_to_id_href->{$name} || $self->logger_or_die->logdie
             ("no field ID corresponding to '$name'\n");
         push @ids, $id;
     }
     return wantarray ? @ids : \@ids;
 }
+
+## compatibility functions
+
+sub get_name    { shift->name }
+sub set_name    { shift->name (shift) }
+
+sub get_cache   { shift->cache }
+sub set_cache   { shift->cache (shift) }
 
 =back
 

@@ -37,7 +37,7 @@ use warnings;
 use Remedy::Form qw/init_struct/;
 
 our @ISA = init_struct (__PACKAGE__);
-Remedy::From->register ('group', __PACKAGE__);
+Remedy::Form->register ('group', __PACKAGE__);
 
 ##############################################################################
 ### Class::Struct ############################################################
