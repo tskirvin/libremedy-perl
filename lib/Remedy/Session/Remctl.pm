@@ -40,7 +40,6 @@ our $PORT = 0;
 ### Declarations #############################################################
 ##############################################################################
 
-use Remedy::Session::Cache;
 use Remedy::Utility qw/or_die/;
 
 use Class::Struct;
@@ -50,10 +49,10 @@ use Net::Remctl;
 our @ISA = qw/Remedy::Session::Remctl::Struct Remedy::Session/;
 
 struct 'Remedy::Session::Remctl::Struct' => {
-    'logger'     => 'Log::Log4perl::Logger',
+    'ctrl'      => 'Net::Remctl',
+    'logger'    => 'Log::Log4perl::Logger',
     'port'      => '$',
     'principal' => '$',
-    'remctl'    => 'Net::Remctl',
     'server'    => '$',
 };
 
@@ -81,11 +80,11 @@ sub connect {
     $remctl->open ($server, $port, $princ)
         or die sprintf ("failed to connect %s to %s: %s\n",
             $princ, "$server:$port", $remctl->error);
-    return $self->remctl ($remctl);
+    return $self->ctrl ($remctl);
 }
 sub disconnect {
     my ($self) = @_;
-    return $self->remctl (undef);
+    return $self->ctrl (undef);
 }
 sub as_string {}
 
@@ -166,7 +165,15 @@ for details).
 
 =cut
 
-sub ars_GetField {
+sub CreateEntry {
+    my ($self, $name, $request_id, $fields_aref) = @_;
+    my $logger = $self->logger_or_die;
+    $logger->debug ("remctl::ars_CreateEntry ($name, $request_id, [...])");
+    return remctl_call ('SESSION'  => $self, 'ACTION' => 'CreateEntry',
+        'ARG_LIST' => [$name, $request_id, $fields_aref]);
+}
+
+sub GetField {
     my ($session, $name, $fieldId, $cache) = @_;
     $session->or_die ($name, "missing schema name");
     $session->or_die ($fieldId, "missing field ID");
@@ -193,20 +200,14 @@ sub ars_GetField {
     my $start_time = time();
     my $field_properties_ref;
 
-    # CASE 1. This is a remctl session.
-    if ($session->get_remctl) {
-        my $remctl = $session->get_remctl();
-        my $action = 'ars_GetField';
+    my $remctl = $session->get_ctrl;
+    my $action = 'ars_GetField';
 
-        $field_properties_ref = remctl_call (
-                 SESSION  => $session,
-                 ACTION   => $action,
-                 ARG_LIST => [$name, $fieldId],
-        );
-    } else { # CASE 2. This is a direct session.
-        my $ctrl = $session->get_ctrl();
-        $field_properties_ref = ARS::ars_GetField($ctrl, $name, $fieldId);
-    }
+    $field_properties_ref = remctl_call (
+        SESSION  => $session,
+        ACTION   => $action,
+        ARG_LIST => [$name, $fieldId],
+    );
 
     # We extract just those parts we want
     my %results = ();
@@ -343,6 +344,14 @@ sub ars_GetFieldsForSchema {
     return %fieldId_to_field_property;
 }
 
+sub SetEntry {
+    my ($self, $name, $request_id, $fields_aref) = @_;
+    my $logger = $self->logger_or_die;
+    $logger->debug ("remctl::ars_SetEntry ($name, $request_id, [...])");
+    return remctl_call ('SESSION'  => $self, 'ACTION' => 'SetEntry',
+        'ARG_LIST' => [$name, $request_id, $fields_aref]);
+}
+
 =back
 
 =cut
@@ -351,13 +360,9 @@ sub ars_GetFieldsForSchema {
 ### Final Documentation ######################################################
 ##############################################################################
 
-=head1 TODO
-
-Move B<Stanford::Remedy::Session> into here.
-
 =head1 REQUIREMENTS
 
-B<Stanford::Remedy::Session>
+B<Net::Remctl>, B<Remedy::Session>
 
 =head1 SEE ALSO
 
