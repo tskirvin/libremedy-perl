@@ -4,7 +4,7 @@ our $VERSION = "0.10";
 
 =head1 NAME
 
-Remedy::Form::Group - Department form
+Remedy::Form::Group - user privilege groups form
 
 =head1 SYNOPSIS
 
@@ -79,6 +79,8 @@ sub field_map {
 =head2 B<Remedy::Form> Overrides
 
 =over 4
+
+=item field_map ()
 
 =item print ()
 

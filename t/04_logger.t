@@ -69,8 +69,7 @@ foreach my $check (@checks) {
 ##############################################################################
 # 6 checks
 
-my $filename = "/tmp/testing";
-# my ($fh, $filename) = tempfile;
+my ($fh, $filename) = tempfile;
 my $log = Remedy::Log->new (
     'file'       => $filename,
     'level'      => $Log::Log4perl::ERROR,
@@ -86,20 +85,20 @@ $log->logger->warn ('testing warn');
 $log->logger->info ('testing info');
 
 my $msg = "Log to file: " . $$;
-ok ($log->logger->warn ($msg)); 
+ok ($log->logger->warn ($msg), "writing a warning to a real file"); 
 
 # The log file should exist.
-ok (-e $filename); 
+ok (-e $filename, "file is created"); 
 
 # Look at the last line and make sure you find our message.
 my $last_line = `tail -n1 $filename`; 
-warn "L: $filename $last_line\n";
-warn "reading $filename\n";
+    warn "L: $filename $last_line\n";
+    warn "reading $filename\n";
 system ("cat $filename");
-warn "done reading $filename\n";
+    warn "done reading $filename\n";
 chomp $last_line;
 my $location = index ($last_line, $msg); 
-ok ($location >= 0);
+ok ($location >= 0, "read back a log message");
 
 ##############################################################################
 ### Subroutines ##############################################################

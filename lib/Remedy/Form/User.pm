@@ -8,7 +8,7 @@ Remedy::Form::User - system accounts on remedy
 
 =head1 SYNOPSIS
 
-    use Remedy::Form::People;
+    use Remedy::Form::User;
 
     # $remedy is a Remedy object
     foreach my $user ($remedy->read ('user', 'all' => 1)) { 
@@ -95,18 +95,18 @@ sub print {
     my ($self) = @_;
     my $user = $self->netid;
     return unless $user;
-    my @groups = $self->groups;
+    
+    my @groups = split (';', $self->group_list || '');
 
     my @return = "User information for '$user'";
     
     push @return, $self->format_text_field (
         {'minwidth' => 20, 'prefix' => '  '}, 
-        'Full Name'   => $self->name,
+        'Full Name'   => $self->name || "(none)",
         'SUNet ID'    => $self->netid || "(none)",
+        'ID'          => $self->id,
+        'Group List'  => scalar @groups ? join (', ', @groups) : "(none)",
     );
-    foreach my $group (@groups) {
-        push @return, "    $group"
-    }
     return wantarray ? @return : join ("\n", @return, '');
 }
 

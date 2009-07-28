@@ -9,10 +9,9 @@ Remedy - basic OO interface to the Remedy API
 =head1 SYNOPSIS
 
     use Remedy;
-    use Log::Log4perl qw/get_logger :no_extra_logdie_message/;
+    my $logger = Remedy::Log->get_logger;
 
-    my $logger = get_logger ('');
-    my $remedy = eval { Remedy->connect ($CONFIG, 'debug' => $DEBUG) }
+    my $remedy = eval { Remedy->connect ('debug' => $DEBUG) }
         or $logger->logdie ("couldn't connect to database: $@");
     $logger->logdie ($@) if $@;
 
@@ -50,12 +49,13 @@ use strict;
 use warnings;
 
 use Class::Struct;
-
 use Remedy::Config;
 use Remedy::Form;
 use Remedy::Session;
 
-struct 'Remedy' => {
+our @ISA = qw/Remedy::Struct/;
+
+struct 'Remedy::Struct' => {
     'config'     => 'Remedy::Config',
     'formdata'   => '%',
     'logobj'     => 'Remedy::Log',
@@ -71,6 +71,18 @@ struct 'Remedy' => {
 =head2 Construction
 
 =over 4
+
+=item new ()
+
+=cut
+
+sub new {
+    my ($proto, %args) = @_;
+    my $class  = ref $proto || $proto;
+    my $self   = Remedy::Struct->new (%args);
+    bless $self, $class;
+    return $self;
+}
 
 =item connect (ARGHASH)
 
@@ -119,10 +131,11 @@ sub connect {
     my $user = $conf->remedy_user or $logger->logdie ("\$REMEDY_USER not set");
 
     my %opts = ( 
+        'logger'   => $logger,
         'password' => $conf->remedy_pass, 
         'server'   => $host, 
         'tcpport'  => $conf->remedy_port,
-        'username' => $user
+        'username' => $user,
     );
 
     ## Create and save the Remedy::Session object
@@ -140,7 +153,7 @@ sub connect {
         local $@;
         my $ctrl = eval { $self->session->connect () };
         unless ($ctrl) { 
-            $@ =~ s/ at .*$//;
+            # $@ =~ s/ at .*$//;
             $logger->logdie ("error on connect: $@");
         }
     }
@@ -314,11 +327,20 @@ Stores the actual connection
 =item logger ()
 
 Returns the actual B<Log::Log4perl::logger> object contained within the
-B<Remedy::Log> object.  Dies 
+B<Remedy::Log> object.  Dies if there is no B<Remedy::Log> object.
 
 =cut
 
 sub logger { shift->logobj_or_die->logger (@_) }
+
+=item cache ()
+
+Returns the B<Remedy::Cache> object contained within the B<Remedy::Config>
+object.  Dies if there is no B<Remedy::Config> object.
+
+=cut
+
+sub cache { shift->config_or_die->cache (@_) }
 
 =item config_or_die (TEXT)
 
@@ -328,9 +350,11 @@ sub logger { shift->logobj_or_die->logger (@_) }
 
 =item session_or_die (TEXT)
 
-Like B<config ()>, B<logger ()>, B<logobj ()>, or B<session ()>, but die with   
-an error (outside of the standard logging system) if the object is not yet     
-set.                                                                           
+=item cache_or_die (TEXT)
+
+Like B<config ()>, B<logger ()>, B<logobj ()>, B<session ()>, or B<cache ()>,  
+but die with an error (outside of the standard logging system) if the object   
+is not yet set.                                                                
 
 =cut
 
@@ -338,6 +362,7 @@ sub config_or_die  { shift->_or_die ('config',  "no configuration", @_) }
 sub logobj_or_die  { shift->_or_die ('logobj',  "no logger",        @_) }
 sub logger_or_die  { shift->_or_die ('logger',  "no logger",        @_) }
 sub session_or_die { shift->_or_die ('session', "no session",       @_) }
+sub cache_or_die   { shift->_or_die ('cache',   "no cache",         @_) }
 
 =back
 

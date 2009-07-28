@@ -1,0 +1,25 @@
+###############################################################################
+### Remedy Configuration ######################################################
+###############################################################################
+# $Id: config.sandbox 13739 2009-02-25 18:53:45Z tskirvin $
+
+## Where is the server hosted, and how do we connect to it?
+$REMEDY_HOST = "r7-app2";
+$REMEDY_PORT = "7150";
+$REMEDY_USER = "SVC_CMDBAPIUser";
+$REMEDY_PASS = 'c3p0r2d2';
+
+## Default criteria for queries and updates
+$COMPANY   = "Stanford University";
+$SUB_ORG   = "IT Services";
+$WORKGROUP = "";
+
+## Additional information for output and reassignments
+$DOMAIN         = "stanford.edu",
+$HELPDESK       = "ITS Help Desk Level 2";
+$REPORT_SOURCE  = "Web Form HelpSU";
+
+## When we're printing text, wrap at this many characters
+$TEXT_WRAP = 79;
+
+1;

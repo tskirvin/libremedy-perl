@@ -51,7 +51,7 @@ error_usage ('need a table name') unless $table;
 $logger->info ("finding all entries in table '$table'");
 my @entries = eval { $remedy->read ($table, 'all' => 1) };
 if ($@) { 
-    print "No information for '$table'; possible values:\n";
+    print "No information for '$table'; registered classes:\n";
     foreach (sort $remedy->registered_classes) { print " * $_\n" }
     exit 1;
 }
@@ -65,12 +65,10 @@ if (! scalar @entries) {
 } else { 
     my $count = 0;
     foreach my $entry (@entries) { 
-        my $print = scalar $entry->print;
+        my %args;
+        $args{'raw'} = 1 if $DEBUG;
+        my $print = scalar $entry->entry->as_string (%args);
         printf ("%sEntry %d\n%s", ($count ? "\n" : ""), ++$count, $print);
-        if ($DEBUG) {
-            my $debug = scalar $entry->debug_pretty;
-            if ($debug ne $print) { print "\nRaw Data:\n$debug" }
-        }
     }
 }
     

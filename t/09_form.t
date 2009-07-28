@@ -1,62 +1,39 @@
-use Test::More tests => 10; 
+##############################################################################
+### Declarations #############################################################
+##############################################################################
 
-use Remedy::Form;
-use Remedy::Testing;
+use strict;
+use warnings;
 
-my ($form, $form2, $rv, %rv, $FH, $formdata);
+use Remedy;
+use Test::More tests => 9; 
 
-### Create a session
-my $session = Remedy::Testing::make_session(); 
+##############################################################################
+### main () ##################################################################
+##############################################################################
 
-ok ($session); 
-ok ($session->connect());
+$ENV{'REMEDY_CONFIG'} = "./config-test";
+my $remedy = eval { Remedy->connect () };
+ok ($remedy, "connection created");
 
-###
-### TEST 2. Make a new Remedy::Form object. 
-###
+my $form = $remedy->form ('CTM:People Organization');
+ok ($form, "read a regular form");
 
-$form = Remedy::Form->new(
-                  session => $session,
-                  name    => 'HPD:Help Desk',
-                                   );
-ok ($form);
-
-$form->populate(); 
-#warn $form->as_string();
-
-ok ($form->get_name =~ m/HPD:Help Desk/);
-ok ($form->get_populated);
+ok ($form->name =~ m/CTM:People Organization/, "form name is as expected");
 
 # Get the formdata object
-$formdata = $form->get_formdata ();
+my $formdata = $form->formdata;
+ok ($formdata, "have full formdata from this form");
 
 my $fieldId_to_fieldName_href = $formdata->get_fieldId_to_fieldName_href(); 
 ok ($fieldId_to_fieldName_href); 
 
-$form2 = Remedy::Form->new(
-                  session => $session,
-                  name    => 'HPD:WorkLog',
-                                   );
-ok ($form2); 
+my $form2 = $remedy->form ('CTM:Support Group');
+ok ($form2, "read another form"); 
+ok ($form2->name != $form->name, "different forms have different names");
 
-###
 ### TEST 3. Get a mapping from schema id to schema name
-###
 
-
-# ok (Remedy::Form::schemaId_to_name('HPD:Help Desk', $session));
-
-
-# Test freeze and thaw.
-$form->set_session(undef);
-my $request_id = 'IDZZZ12345' . $$;
-$form->set_request_id($request_id); 
-my $icicle = Remedy::Misc::freeze_object($form);
-ok($icicle);
-
-my $new_form = Remedy::Misc::thaw_object($icicle);
-ok ($new_form);
-ok ($new_form->get_request_id() eq $form->get_request_id());
 
 # ###
 #### TEST 4. Make a select query 
@@ -66,5 +43,4 @@ ok ($new_form->get_request_id() eq $form->get_request_id());
 #my @results = $new_form->execute_select_qry($qry); 
 #ok (@results); 
 
-$session->disconnect(); 
-
+$session->disconnect; 

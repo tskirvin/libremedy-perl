@@ -1,5 +1,5 @@
 package Remedy::Config;
-our $VERSION = '0.55';
+our $VERSION = '0.56';
 
 =head1 NAME
 
@@ -190,6 +190,40 @@ Matches the B<wrap> accessor.
 our $TEXT_WRAP = 80;
 $FUNCTIONS{'wrap'} = \$TEXT_WRAP;
 
+=item $CACHE_EXPIRE
+
+How long do we want B<Remedy::Cache> to cache its entries?  
+Defaults to I<14 days>.
+
+Matches the B<cache_expire> accessor.
+
+=cut
+
+our $CACHE_EXPIRE    = "14 days";
+$FUNCTIONS{'cache_expire'} = \$CACHE_EXPIRE;
+
+=item $CACHE_NAMESPACE
+
+What namespace should we store our cache in?  Defaults to I<remedy_cache>.
+
+Matches the B<cache_namespace> accessor.
+
+=cut
+
+our $CACHE_NAMESPACE = "remedy_cache";
+$FUNCTIONS{'cache_namespace'} = \$CACHE_NAMESPACE;
+
+=item $CACHE_ROOT
+
+What is the top-level of our cache?  Defaults to F</tmp>.  
+
+Matches the B<cache_root> accessor.
+
+=cut
+
+our $CACHE_ROOT = "/tmp";
+$FUNCTIONS{'cache_root'} = \$CACHE_ROOT;
+
 =back
 
 =cut
@@ -203,12 +237,14 @@ use warnings;
 
 use Class::Struct;
 use Remedy::Log;
+use Remedy::Cache;
 
 my %opts;
 foreach (keys %FUNCTIONS) { $opts{$_} = '$' }
 
 struct 'Remedy::Config' => { 
-    'log' => 'Remedy::Log',
+    'log'   => 'Remedy::Log',
+    'cache' => 'Remedy::Cache',
     %opts, 
 };
 
@@ -225,6 +261,14 @@ per-function.
 
 =over 4
 
+=item cache (Remedy::Cache)
+
+=item cache_namespace ($)
+
+=item cache_expire ($)
+
+=item cache_root ($)
+
 =item company ($)
 
 =item config ($)
@@ -235,7 +279,7 @@ per-function.
 
 =item helpdesk ($)
 
-=item log ($)
+=item log (Remedy::Log)
 
 =item logfile ($)
 
@@ -277,7 +321,7 @@ Returns the new object.
 sub load {
     my ($class, $file) = @_;
     $file ||= $ENV{'REMEDY_CONFIG'} || $CONFIG;
-    do $file or LOGDIE ("Couldn't load '$file': " . ($@ || $!) . "\n");
+    do $file or die "Couldn't load '$file': " . ($@ || $!) . "\n";
     my $self = $class->new ();
 
     $self->config ($file);
@@ -289,8 +333,14 @@ sub load {
         'level_file' => $self->loglevel_file,
     );
     $log->init;
-
     $self->log ($log);
+
+    my $cache = Remedy::Cache->new (
+        'expiration' => $self->cache_expire,
+        'namespace'  => $self->cache_namespace,
+        'rootdir'    => $self->cache_root,
+    );
+    $self->cache ($cache);
 
     $self;
 }
@@ -350,7 +400,7 @@ configuration file to load instead of F</etc/remedy/config>.
 
 =head1 REQUIREMENTS
 
-B<Remedy::Log>
+B<Remedy::Log>, B<Remedy::Cache>
 
 =head1 SEE ALSO
 

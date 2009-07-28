@@ -1,4 +1,22 @@
-package Remedy::Form::Utility;
+package Remedy::FormData::Utility;
+$VERSION = "0.10";
+# Copyright and license are in the documentation below.
+
+=head1 NAME
+
+Remedy::FormData::Utility - additional functions for Remedy::FormData
+
+=head1 SYNOPSIS
+
+    use Remedy::FormData::Utility;
+
+    [...]
+
+=head1 DESCRIPTION
+
+Remedy::FormData::Utility offers add...
+
+=cut
 
 ##############################################################################
 ### Configuration ############################################################
@@ -7,80 +25,95 @@ package Remedy::Form::Utility;
 ## Number of characters designated for the field name in the debug functions
 our $DEBUG_CHARS = 30;
 
+## Default wrap width for Text::Wrap
+$Text::Wrap::columns = 80;
+
+## Default wrap type for Text::Wrap
+$Text::Wrap::huge = 'overflow';
+
 ##############################################################################
 ### Declarations #############################################################
 ##############################################################################
 
 use strict;
 
+use Exporter;
 use POSIX qw/strftime/;
 use Text::Wrap;
 
-$Text::Wrap::columns = 80;
-$Text::Wrap::huge    = 'overflow';
+our @ISA = qw/Exporter/;
+our @EXPORT = qw/as_string format_date format_text format_text_field/;
 
 ##############################################################################
 ### Subroutines ##############################################################
 ##############################################################################
 
-=head2 Subroutines 
+=head1 FUNCTIONS
 
 =over 4
 
-=item as_string ()
+=item as_string (ARGHASH)
 
 Creates a summary of all valid data within the current form, formatted for
 screen output.  The lines are sorted numerically by field ID, and show the
 field ID, the field name, and the set value.  All of this is then formatted for
 80 characters and wrapped using B<Text::Wrap>.
 
+I<ARGHASH>
+
+=over 4
+
+=item raw (0|1)
+
+If set, then we will print the raw value of the database values in addition to
+the human-converted ones.  These raw values will appear following the human
+values.
+
+=back
+
 =cut
 
 sub as_string {
     my ($self, %args) = @_;
     my %schema = $self->schema (%args);
-    my $form = $self->entry;
 
     my (@entries, @return, %max);
     my ($maxid, $maxfield, $maxvalue);
     foreach my $id (sort {$a<=>$b} keys %schema) {
         next unless defined $schema{$id};
-        my $field = $schema{$id} || "*unknown*";
+        my $field = $schema{$id};
 
-        my $value = $self->get ($schema{$id});
-        next unless defined $value;
-        $value =~ s/^\s+|\s+$//g;
+        my $raw    = $self->value ($field);
+        my $format = $self->data_to_human ($field, $raw);
+        next unless defined $format;
+        map { s/^\s+|\s+$//g } $format, $raw;
 
         $max{'id'}    = length ($id)    if length ($id)    > $max{'id'};
         $max{'field'} = length ($field) if length ($field) > $max{'field'};
 
-        push @entries, [$id, $field, $value];
+        push @entries, [$id, $field || "*unknown*", $format, $raw];
     }
 
     $max{'field'} = $DEBUG_CHARS if $max{'field'} > $DEBUG_CHARS;
 
     foreach my $entry (@entries) {
-        my ($id, $field, $value) = @{$entry};
+        my ($id, $field, $value, $raw) = @{$entry};
         my $id_field    = '%'  . $max{'id'}    . 'd';
         my $field_field = '%-' . $max{'field'} . 's';
         my $size  = $max{'id'} + $max{'field'} + 2;
-        my $form = "$id_field $field_field %s";
+
+        my $form    = "$id_field $field_field %s";
+        my $rawform = (' ' x $max{'id'}) . ' %-' . $max{'field'}. 's %s';
+
         push @return, wrap ('', ' ' x ($size), 
             sprintf ($form, $id, $field, $value));
+        if ($args{'raw'} && $raw != $value) { 
+            push @return, wrap ('', ' ' x ($size), 
+                sprintf ($rawform, '  RAW VALUE', $raw));
+        }
     } 
 
     wantarray ? @return : join ("\n", @return, '');
-}
-
-=item debug_table ()
-
-=cut
-
-sub debug_table {
-    my ($self, @extra) = @_;
-    return unless $self->entry;
-    # return $self->entry->as_string ('no_session' => 1, @extra);
-    return $self->entry->as_string (@extra);
 }
 
 =item format_date (TIME)
@@ -103,6 +136,8 @@ are optional, and default to an empty string.  I<NAME> is self-explanatory;
 I<EMAIL> will have the value of the parent's I<DOMAIN> value added after the
 '@' if one is not already offered.
 
+TODO: MAKE THIS WORK SOMEHOW
+
 =cut
 
 sub format_email {
@@ -116,7 +151,15 @@ sub format_email {
 
 =item format_text (ARGHASHREF, TEXT)
 
-[...]
+Formats 
+
+=over 4
+
+=item minwidth (CHARS)
+
+=item prefix (STRING)
+
+=back
 
 =cut
 
@@ -164,5 +207,36 @@ sub format_text_field {
 
     return wantarray ? @return : join ("\n", @return, '');   
 }
+
+=back
+
+=cut
+
+##############################################################################
+### Final Documentation ######################################################
+##############################################################################
+
+=head1 TODO
+
+=head1 REQUIREMENTS
+
+B<Text::Wrap>
+
+=head1 SEE ALSO
+
+Remedy::FormData(8)
+
+=head1 AUTHOR
+
+Tim Skirvin <tskirvin@stanford.edu>
+
+=head1 LICENSE
+
+Copyright 2008-2009 Board of Trustees, Leland Stanford Jr. University
+
+This program is free software; you may redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=cut
 
 1;

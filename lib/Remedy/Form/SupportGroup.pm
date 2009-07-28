@@ -70,9 +70,9 @@ a group email account, or a mail-to-news gateway, or something similar.
 =cut
 
 sub field_map { 
-    'id'          => 'Support Group ID',
-    'name'        => 'Support Group Name',
-    'email'       => 'Alternate Group Email Address',
+    'id'    => 'Support Group ID',
+    'name'  => 'Support Group Name',
+    'email' => 'Alternate Group Email Address',
 }
 
 ##############################################################################

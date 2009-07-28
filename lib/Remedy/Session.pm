@@ -1,16 +1,17 @@
 package Remedy::Session;
-our $VERSION = "0.01";
+our $VERSION = "0.90";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
 
-Remedy::Session
+Remedy::Session - provides data connection to the Remedy database
 
 =head1 SYNOPSIS
 
     use Remedy::Session;
 
     my $session = Remedy::Session->new (
+        'type'     => 'ARS',
         'server'   => 'r7-app1-dev.stanford.edu',
         'username' => $user,
         'password' => $pass) or die "couldn't create remedy session: $@\n";
@@ -19,8 +20,9 @@ Remedy::Session
 
 =head1 DESCRIPTION
 
-Currently (mostly) a wrapper for B<Stanford::Remedy::Session>; please see that
-man page for details.
+Remedy::Session provides the data connection to the Remedy database.  It is
+primarily a wrapper for B<Remedy::Session::ARS>, though it is written with the
+understanding that we may eventually want B<Remedy::Session::Remctl>.
 
 =cut
 
@@ -28,89 +30,77 @@ man page for details.
 ### Configuration ############################################################
 ##############################################################################
 
-our %DEFAULT = ('default' => 'ARS');
+our %DEFAULT = ('type' => 'ARS');
 
 ##############################################################################
 ### Declarations #############################################################
 ##############################################################################
 
-use Stanford::Remedy::Session;
-use Remedy::Session::Cache;
-use Remedy::Utility qw/or_die/;
+use strict;
+use warnings;
 
-use Class::Struct;
-
-our @ISA = qw/Stanford::Remedy::Session/;
+use Remedy::Session::ARS;
 
 ##############################################################################
 ### Subroutines ##############################################################
 ##############################################################################
 
+=head1 FUNCTIONS
+
+=head2 Constructor 
+
+=over 4
+
+=item new (ARGHASH)
+
+Creates a new object of the appropriate B<Remedy::Session> sub-class.  
+Chooses this sub-class based on I<ARGHASH>:
+
+=over 2
+
+=item type TYPE
+
+Chooses which type of object to create based on I<TYPE>.  Currently supports:
+
+    ARS         Remedy::Session::ARS        (DEFAULT)
+
+=back
+
+All other arguments are passed to B<new ()> in the appropriate object.
+
+=cut
+
 sub new {
-    my ($proto, %args) = @_;
-    $args{'type'} ||= $DEFAULT{'type'};
-    if ($args{'type'} eq 'remctl') { Remedy::Session::Remctl->new (@_) }
-    if ($args{'type'} eq 'ARS')    { Remedy::Session::Remctl->new (@_) }
-    else { die "no such session type: '$type'\n" }
-}
-
-sub connect    { die "cannot connect without session type\n" }
-sub disconnect { die "cannot disconnect without session type\n" }
-sub as_string  { 'invalid object' }
-
-sub type { 'unknown' }
-
-foreach my $func (qw/remctl server ctrl username password tcpport lang
-                     authString remctl_port port principal/) { 
-    foreach my $sub ('', 'get_', 'set_') {
-        my $text = "sub $func$sub { undef }";
-        eval $text;
-    }
-}
-sub get_server_or_die { 
-    $_[0]->or_die (shift->get_server, "no server parameter", @_);
-}
-
-=head2 Subroutines
-
-=over 4
-
-=item error ()
-
-Pulls the value of B<$ARS::ars_errstr>, and returns it (if it is defined) or
-the string 'no ars error'.
-
-=back
-
-=cut
-
-sub error {
-    return defined $ARS::ars_errstr ? $ARS::ars_errstr : '(no ars error)';
+    my ($proto, @rest) = @_;
+    my %args = (%DEFAULT, @rest);
+    my $type = $args{'type'} || 'none';
+    if ($type eq 'ARS') { Remedy::Session::ARS->new    (%args)  }
+    else                { die "invalid session type: '$type'\n" }
 }
 
 =back
 
-=head2 ARS Wrappers
+=cut
+
+##############################################################################
+### Default Subroutines ######################################################
+##############################################################################
+
+=head2 Defaults and Examples
+
+The following routines are defined as defaults, which are therefore inherited
+by other classes and can be overridden as necessary.
 
 =over 4
 
-=item ars_GetField (NAME, FIELDID [, CACHE])
+=item as_string ()
+
+Returns a string describing the object - which, if you're invoking it from the
+parent class, is just going to read I<INVALID OBJECT>.
 
 =cut
 
-sub ars_GetField { return {} }
-
-=item ars_GetFieldTable ([CTRL], SCHEMA)
-
-=cut
-
-sub ars_GetFieldTable { return () }
-
-=item ars_GetFieldsForSchema (NAME [, CACHE])
-
-=cut
-
-sub ars_GetFieldsForSchema { return () }
+sub as_string  { 'INVALID OBJECT' }
 
 =back
 
@@ -120,17 +110,13 @@ sub ars_GetFieldsForSchema { return () }
 ### Final Documentation ######################################################
 ##############################################################################
 
-=head1 TODO
-
-Move B<Stanford::Remedy::Session> into here.
-
 =head1 REQUIREMENTS
 
-B<Stanford::Remedy::Session>
+B<Remedy::Session::ARS>
 
 =head1 SEE ALSO
 
-Remedy(8)
+Remedy::Session::Remctl(8), Remedy(8)
 
 =head1 AUTHOR
 

@@ -6,7 +6,7 @@ use strict;
 use warnings;
 
 use File::Temp qw/tempdir/;
-use Remedy::Session::Cache;
+use Remedy::Cache;
 use Test::More tests => 7;
 
 ##############################################################################
@@ -14,7 +14,7 @@ use Test::More tests => 7;
 ##############################################################################
 # 1 check
 
-ok ($Remedy::Session::Cache::VERSION);
+ok ($Remedy::Cache::VERSION);
 
 ##############################################################################
 ### Cache Checks #############################################################
@@ -24,7 +24,7 @@ ok ($Remedy::Session::Cache::VERSION);
 my $namespace = "testing" . $$; 
 my $cache_key = "a key" . $$;
 
-my $cache = Remedy::Session::Cache->new ('namespace' => $namespace); 
+my $cache = Remedy::Cache->new ('namespace' => $namespace); 
 ok ($cache); 
 
 # Get the cache results (will not exist). 
@@ -33,14 +33,15 @@ ok (! $cache_results_ref);
 
 # Set something. 
 my @data = [1, 2, {3, 4}];
-ok ($cache->set_value ($cache_key, \@data));
+ok (! $cache->set_value ($cache_key, \@data), "setting a default value");
 
 $cache_results_ref = $cache->get_value ($cache_key);
 ok ($cache_results_ref); 
 
 # Change the default cache root 
 my $tempdir = tempdir (CLEANUP => 1);
-Remedy::Session::Cache::set_default_cache_root ($tempdir);
-$cache = Remedy::Session::Cache->new (namespace => $namespace); 
+$Remedy::Cache::DEFAULT_CACHE_ROOT = $tempdir;
+
+$cache = Remedy::Cache->new (namespace => $namespace); 
 ok ($cache);
-ok ($cache->set_value ($cache_key, \@data));
+ok (! $cache->set_value ($cache_key, \@data), "setting value elsewhere");
