@@ -323,6 +323,9 @@ sub populate_from_session {
     $logger->all ("GetFieldsForSchema ($session, $name)");
     my %id_to_property = $session->GetFieldsForSchema ($name, $self->cache);
 
+    ## Keep track of a list of fields that we don't want to track.
+    my @remove;
+
     ## Populate the hashes
     foreach my $name (keys %name_to_id) {
         my $id = $name_to_id{$name};
@@ -373,7 +376,12 @@ sub populate_from_session {
                 $logger->logdie ("don't know how to deal with limit ($id): "
                     . (Dumper $enumlimits));
             }
-        }
+
+        } 
+
+        ## 'attach' fields are sometimes buggy?  Guess so.  Drop them.
+        ## (may want to drop 'attach_pool' too.)
+        if ($datatype eq 'attach') { push @remove, $id }
     }
 
     my %id_to_name = reverse %name_to_id;
@@ -402,7 +410,10 @@ sub populate_from_session {
 
     ## Status History (fieldId 15) is weird: it is not really a field at all,
     ## so delete it.  Or at least that's what Adam said.
-    $self->delete_fieldId ('15');
+    push @remove, 15;
+
+    ## Actually remove the fields we don't want to see again.
+    foreach (@remove) { $self->delete_fieldId ($_) }
 
     return;
 }
@@ -520,7 +531,7 @@ sub as_string {
 
     my @return;
     if (! $opts{'no_session'}) {
-        my $session = $self->get_session();
+        my $session = $self->session;
         if ($session) { push @return, $session->as_string ('  ') }
         else          { push @return, "session undefined"        }
     }
@@ -668,6 +679,34 @@ sub _format_enum_values {
 ##############################################################################
 ### Final Documentation ######################################################
 ##############################################################################
+
+=head1 NOTES
+
+=head2 IGNORED FIELDS
+
+B<Remedy::FormData>, while intended to be all-inclusive, does drop a few fields
+in order to function properly.
+
+=over 4
+
+=item Field ID 15 (I<Status History>)
+
+This is apparently a weird field.  Adam commented in his original code:
+
+    Status History (fieldId '15') is weird: it is not really a
+    field at all, so delete it.
+
+I don't quite understand why it's weird, but I can confirm that it *is* weird.
+It is a regular 'system' type field, too, so I don't understand why.
+
+=item All Fields with datatype I<attach>
+
+Every time we have encounted this field type, it has caused problems with SQL
+select statements (error I<ORA-00918: column ambiguously defined>).  We haven't
+had to use it yet, either.  More information would probably be helpful, but for
+now, dropping the field it seems the best way to go.
+
+=back
 
 =head1 REQUIREMENTS
 

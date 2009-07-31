@@ -49,7 +49,7 @@ error_usage ('need a table name') unless $table;
 
 ## Pulling all entries from table
 $logger->info ("finding all entries in table '$table'");
-my @entries = eval { $remedy->read ($table, 'all' => 1) };
+my @entries = eval { $remedy->read ($table, "1=1") };
 if ($@) { 
     print "No information for '$table'; registered classes:\n";
     foreach (sort $remedy->registered_classes) { print " * $_\n" }

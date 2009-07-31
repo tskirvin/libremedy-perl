@@ -37,7 +37,7 @@ ok (my %map = $CLASS->field_map, "$CLASS has a field map");
 ok (my $table = $CLASS->table, "$CLASS has a table name");
 
 ok (my $form = $remedy->form ($table), "have information about $table");
-ok (my @entries = $remedy->read ($table, 'max' => $ENTRY_COUNT, 
+ok (my @entries = $remedy->read ($table, {}, 'max' => $ENTRY_COUNT, 
     'where' => '1=1'), "can read information from $table");
 ok (scalar @entries == $ENTRY_COUNT, "got the right number of entries");
 

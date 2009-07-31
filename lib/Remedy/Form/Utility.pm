@@ -38,7 +38,7 @@ field ID, the field name, and the set value.  All of this is then formatted for
 
 sub as_string {
     my ($self, %args) = @_;
-    my %schema = $self->schema (%args);
+    my %schema = $self->entry_or_die->schema (%args);
     my $form = $self->entry;
 
     my (@entries, @return, %max);
@@ -79,8 +79,7 @@ sub as_string {
 sub debug_table {
     my ($self, @extra) = @_;
     return unless $self->entry;
-    # return $self->entry->as_string ('no_session' => 1, @extra);
-    return $self->entry->as_string (@extra);
+    return $self->entry_or_die->formdata->as_string (@extra);
 }
 
 =item format_date (TIME)

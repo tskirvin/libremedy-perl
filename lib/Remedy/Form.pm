@@ -19,7 +19,7 @@ man pages listed under SEE ALSO for more usage information.
 Remedy::Form implements a consistent set of shared functions used by the
 sub-form modules (eg B<Remedy::Form::People>, B<Remedy::Form::SupportGroup>,
 B<Remedy::Form::Generic>), so that they can tie into the central B<Remedy>
-system.
+system.  It consis
 
 =cut
 
@@ -91,10 +91,12 @@ function, making it read-only.
 =item (per-object B<Class::Struct> accessors) ($)
 
 Adds one accessor of type '$' for each key from the B<field_map ()> function.
-This data will be converted back and forth with the B<key_field ()> hash (see
-above) at read/write.
+This data will be directly accessed with B<get> and B<set>, amongst other
+functions.  
 
-=item (extras)
+Together, these are known as the Key Fields.
+
+=item (extras) (various)
 
 We can add extra accesors through I<EXTRAHASH>, which is passed into the struct
 initialization directly.  That is, if you wanted to add an additional 'debug'
@@ -123,7 +125,7 @@ sub init_struct {
     my %fields;
     my %map = $class->field_map;
     foreach (keys %map) { $fields{$_} = '$' }
-    struct $new => {'entry'   => 'Remedy::FormData::Entry',
+    struct $new => {'entry'  => 'Remedy::FormData::Entry',
                     'parent' => 'Remedy',
                     'table'  => '$', %extra, %fields};
 
@@ -135,7 +137,10 @@ sub init_struct {
     return (__PACKAGE__, $new);
 }
 
-=item key_field (FIELD)
+=item key_field (NAME)
+
+If there is a Key Field matching field name I<NAME>, then return the matching
+accessor name.  Otherwise, return undef.
 
 =cut
 
@@ -146,17 +151,36 @@ sub key_field {
     return;
 }
 
-=item register ()
+=item register ([KEY[, CLASS]])
 
-Globally registers [...]
+Manages a global cache of "registered forms".  Whenever a form is initialized
+with B<init_struct>, its class (e.g. B<Remedy::Form::User>) gets registered
+with the global cache.  This function is used to both read and add to the
+cache.  Possible argument paths:
+
+=over 2
+
+=item I<KEY> and I<CLASS> are defined
+
+Registers the class I<CLASS> as I<KEY>.
+
+=item I<KEY> is defined
+
+Returns the underlying class for I<KEY>.
+
+=item (no arguments)
+
+Returns a hash containing the complete registration cache.
+
+=back
 
 =cut
 
 sub register {
-    my ($self, $human, $class) = @_;
-    return %REGISTER unless defined $human;
-    return $REGISTER{lc $human} unless defined $class;
-    $REGISTER{lc $human} = ref $class ? $class : [$class];
+    my ($self, $key, $class) = @_;
+    return %REGISTER unless defined $key;
+    return $REGISTER{lc $key} unless defined $class;
+    $REGISTER{lc $key} = ref $class ? $class : [$class];
     return $class;
 }
 
@@ -236,6 +260,14 @@ sub form_names {
     return @return;
 }
 
+=item formdata ()
+
+
+
+=cut
+
+sub formdata { shift->entry_or_die->formdata_or_die }
+
 =item new (ARGHASH)
 
 Creates and returns a new B<Remedy::Form> object.  Requires two arguments from 
@@ -300,7 +332,7 @@ sub related_by_id {
         return;
     }
     $logger->debug (sprintf ("read (%s, %s => %s)", $table, $field, $id));
-    return $parent->read ($table, $field => $id, %args);
+    return $parent->read ($table, {$field => $id}, %args);
 }
 
 =item remedy_to_key ()
@@ -640,11 +672,20 @@ sub new_entry {
     return $data;
 }
 
-=item read (PARENT, ARGHASH)
+=item read (TABLE, WHERE, ARGHASH)
 
-Reads from the database in the B<Remedy> object I<PARENT>.  I<ARGHASH> is
-passed along to B<limit> to decide how to limit the 
-arguments in the argument hash I<ARGHASH>:
+Reads from the database in the B<Remedy> object I<PARENT>.  
+
+The selection is determined by I<WHERE>.  If I<WHERE> is a hashref, then we will 
+pass its contents to B<limit ()> to create the selection limit.  Otherwise, we
+will use the string I<WHERE> as the limitation itself.  For example, either of
+these are valid:
+
+    $form->read ('User', 1=1)
+    $form->read ('User', { 'Full Name' => $name });
+
+I<ARGHASH> is used to determine other information about the eventual selection.
+Specifically:
 
 =over 4
 
@@ -655,12 +696,6 @@ Which entry should we start counting from (for I<max>).  No default.
 =item max (INT)
 
 How many entries to return.  No default.
-
-=item where (STRING)
-
-Which entries to select.  If I<limit_ref> is offered, it is used; otherwise,
-all remaining items in the argument hash are passed to B<limit ()> to make an
-appropriate array.
 
 =back
 
@@ -673,18 +708,17 @@ If invoked in a scalar context, only returns the first item.
 =cut
 
 sub read {
-    my ($self, $table, %args) = @_;
+    my ($self, $table, $where, %args) = @_;
     my $parent = $self->parent_or_die ('need parent to read', 0, %args);
     my $session = $parent->session_or_die;
     my $logger  = $parent->logger_or_die;
     return unless $table;
 
     my (%extra, @debug);
-    foreach (qw/max sort_id sort_dir first where/) {
+    foreach (qw/max sort_id sort_dir first limit/) {
         next unless defined $args{$_};
         $extra{$_} = $args{$_};
-        push @debug, "$_ => $args{$_}" unless $_ eq 'where';
-        delete $args{$_};
+        push @debug, "$_ => $args{$_}";
     }
     my @return;
 
@@ -696,7 +730,8 @@ sub read {
 
     foreach my $form (@forms) { 
         ## Figure out how we're limiting our search
-        my $limit = $extra{'where'} || join (" AND ", $form->limit (%args));
+        my $limit = ref $where ? join (" AND ", $form->limit (%$where))
+                               : $where;
         unless ($limit) { 
             $logger->debug ("no search limits, skipping");
             next;
@@ -926,6 +961,7 @@ sub session_or_die {
     $args{'count'}++;
     $self->parent_or_die (%args)->session_or_die;
 }
+
 sub logger_or_die  { 
     my ($self, %args) = @_;
     $args{'count'}++;
@@ -949,6 +985,14 @@ sub cache_or_die {
 =cut
 
 sub entry_or_die { $_[0]->or_die (shift->entry, 'no entry', @_) }
+
+=item formdata_or_die () 
+
+=cut
+
+sub formdata_or_die { 
+    $_[0]->or_die (shift->entry_or_die->formdata, 'no formdata', @_) 
+}
 
 =back
 
@@ -1010,25 +1054,6 @@ sub _init {
 
     ## Reload the object, so as to fill in the key values, and return it
     return $obj->remedy_to_key;
-}
-
-### _or_die (TYPE, ERROR, EXTRATEXT, COUNT)
-# Helper function for Class::Struct accessors.  If the value is not defined -
-# that is, it wasn't set - then we will immediately die with an error message
-# based on a the calling function (can go back extra levels by offering
-# COUNT), a generic error message ERROR, and a developer-provided, optional
-# error message EXTRATEXT.  
-sub _or_die_OLD {
-    my ($self, $type, $error, $extra, $count) = @_;
-    # return $self->$type if defined $self->$type;
-    $count ||= 0;
-
-    my $func = (caller ($count + 2))[3];    # default two levels back
-
-    chomp ($extra);
-    my $fulltext = sprintf ("%s: %s", $func, $extra ? "$error ($extra)"
-                                                    : $error);
-    die "$fulltext\n";
 }
 
 ##############################################################################

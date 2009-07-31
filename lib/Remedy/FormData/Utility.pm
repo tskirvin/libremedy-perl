@@ -113,7 +113,7 @@ sub as_string {
         }
     } 
 
-    wantarray ? @return : join ("\n", @return, '');
+    return wantarray ? @return : join ("\n", @return, '');
 }
 
 =item format_date (TIME)

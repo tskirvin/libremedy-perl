@@ -59,7 +59,7 @@ if (lc $query eq 'table') {
     $logger->info ("Getting all information about table '$table'");
     foreach my $obj ($remedy->form ($table)) {
         if (defined $obj) {
-            print scalar $obj->debug_table;
+            print scalar $obj->formdata_or_die->as_string;
             exit 0;
         } else {
             print "No information for '$table'; known values:\n";
@@ -75,7 +75,7 @@ if (lc $query eq 'table') {
 
     my %search = ('SUNET ID' => $user);
     $logger->info ("Printing user information for '$user'");
-    my @return = $remedy->read ('Remedy::Form::People', %search);
+    my @return = $remedy->read ('Remedy::Form::People', \%search);
     if (! scalar @return) {
         $logger->logdie ("no matching entries")
     }
@@ -95,7 +95,7 @@ if (lc $query eq 'table') {
 
     my %search = ('Support Group Name' => $group);
     $logger->info ("Printing group information for '$group'");
-    my @return = $remedy->read ('supportgroup', %search);
+    my @return = $remedy->read ('supportgroup', \%search);
     if (! scalar @return) {
         $logger->logdie ("no matching entries")
     }
@@ -114,7 +114,7 @@ if (lc $query eq 'table') {
     foreach my $code (@rest) {
         $logger->info ("finding info for error code '$code'");
         my %search = ('Message Number' => $code);
-        my @entries = $remedy->read ('Remedy::Form::Error', %search);
+        my @entries = $remedy->read ('Remedy::Form::Error', \%search);
         if (! scalar @entries) {
             print "No information for code '$code'\n";
             next;

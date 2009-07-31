@@ -194,7 +194,6 @@ by B<read_into ()>.
 
 sub clone {
     my ($self, $source) = @_;
-    warn "cloning from $source\n";
     $self = $self->new ($source->name, $source->session) unless ref $self;
     foreach (keys %FIELDS) { $self->$_ ($source->$_) }
     return $self;
@@ -248,11 +247,11 @@ sub insert {
     ## TODO: reference the bug in the error msg
 
     unless ($req_id) {
-        my $where_clause = $self->create_where_clause ();
-        my @forms = $session->read ($name, $where_clause);
+        my $where = $self->create_where_clause ($self->fields_not_empty);
+        my @forms = $self->read ($where, 'max' => 10);
         my $count = scalar @forms;
         $logger->logdie ("no entries found after creation") unless $count;
-        $logger->logdie ("too many entries found ($count) after creation")
+        $logger->logdie ("too many entries (at least $count) after creation")
             if ($count > 1);
         $req_id = $forms[0]->request_id;
         $logger->warn ("still no ID after search") unless $req_id;
@@ -285,12 +284,12 @@ sub read {
     my $name    = $self->name_or_die;
     my $session = $self->session_or_die;
 
-    my @match   = $self->fields_to_match;
-
+    my @limit = $args{'limit'} ? @{$args{'limit'}}
+                                 : $self->fields_to_match;
     $where ||= $self->create_where_clause;
 
     my %search = ('schema' => $name, 'where' => $where, 
-        'limit' => \@match, %args);
+        'limit' => \@limit, %args);
     $logger->all ("read ($name, $where, [...])");
     my @results = $session->read (%search);
 
@@ -327,25 +326,21 @@ Returns the request ID (field 1) of the new entry on success, dies on failure.
 =cut
 
 sub read_into {
-    my ($self, @rest) = @_;
+    my ($self, $where, @rest) = @_;
     my $logger  = $self->logger_or_die;
-    my $session = $self->session;
 
-    my @results = $self->read (@rest);
+    my @results = $self->read ($where, 'max' => 2);
 
     my $number_of_results = scalar @results;
     if ($number_of_results > 1) {
-        $logger->logdie ("read_into (): more than one result found");
+        $logger->logdie ("read_into: more than one result found");
     } elsif ($number_of_results < 1) {
-        my $error = $session->error;
-        $logger->logdie ("read_into (): no matches found ($error)");
+        my $error = $self->session_or_die->error;
+        $logger->logdie ("read_into: no matches found ($error)");
     } else {
-        $logger->debug ('one match on read_into ()');
+        $logger->debug ('one match on read_into');
         $self->clone ($results[0]);
     }
-
-    warn "self: ", scalar $self->as_string;
-    warn "rid: ", $self->request_id, "\n";
 
     return $self->request_id;
 }
@@ -535,6 +530,26 @@ sub field_to_enum {
     return %{$values};
 }
 
+=item fields_not_empty ()
+
+Returns a an array of field names that are not empty in the current object.
+
+=cut
+
+sub fields_not_empty {
+    my ($self, %args) = @_;
+    my $values = $self->values;
+
+    my @fields = ();
+    foreach my $name (keys %{$values}) {
+        my $value = $$values{$name};
+        # next unless exists $$values{$name};
+        next unless defined $$values{$name};
+        push @fields, $name;
+    }
+    return @fields;
+}
+
 =item fields_to_match ()
 
 Based on the contents of B<fields_only>, figure out which field IDs we want to
@@ -556,6 +571,7 @@ sub fields_to_match {
                             : keys %{$self->formdata_or_die->id_to_name};
     return wantarray ? @ids : \@ids;
 }
+
 
 =item field_type (NAME)
 

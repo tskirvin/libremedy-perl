@@ -211,11 +211,11 @@ only returns the first entry.
 =cut
 
 sub read { 
-    my ($self, $form_name, %args) = @_;
+    my ($self, $form_name, @rest) = @_;
     my @return;
     foreach my $form ($self->form ($form_name)) {
         $self->logger_or_die->all (sprintf ("read (%s)", $form->table));
-        push @return, $form->read ($form->table, %args);
+        push @return, $form->read ($form->table, @rest);
         last if (! wantarray && scalar @return);
     }
     return wantarray ? @return : $return[0];
