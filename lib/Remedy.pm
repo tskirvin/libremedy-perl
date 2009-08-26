@@ -201,7 +201,7 @@ sub create {
     return $self->form ($form_name, @args);
 }
 
-=item read (FORM_NAME, ARGHASH)
+=item read (FORM_NAME, WHERE_INFO, ARGHASH)
 
 Given the form I<FORM_NAME>, returns an appropriate 
 
