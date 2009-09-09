@@ -235,7 +235,7 @@ sub insert {
 
     ## Actually insert the entry.
     my $req_id = eval { $session->CreateEntry ($name, [%fields]) };
-    $logger->logdie ("error on CreateEntry: $@") if $@;
+    $logger->logdie ($@) if $@;
 
     ## HACK: Work-around for existing Remedy bug.  Basically, if you write
     ## to a join table, then you will not get a request ID back (the writing
@@ -248,10 +248,11 @@ sub insert {
 
     unless ($req_id) {
         my $where = $self->create_where_clause ($self->fields_not_empty);
-        my @forms = $self->read ($where, 'max' => 10);
+    warn "WHERE: $where\n";
+        my @forms = $self->read ($where, 'max' => 5);
         my $count = scalar @forms;
-        $logger->logdie ("no entries found after creation") unless $count;
-        $logger->logdie ("too many entries (at least $count) after creation")
+        $logger->logdie ("no entries found after creation\n") unless $count;
+        $logger->logdie ("too many entries (at least $count) after creation\n")
             if ($count > 1);
         $req_id = $forms[0]->request_id;
         $logger->warn ("still no ID after search") unless $req_id;
@@ -266,6 +267,7 @@ sub insert {
         $logger->logdie ("could not re-read object into self: $@");
     }
 
+    warn "REQ: $req_id\n";
     ## Return the request id.
     return $req_id;
 }

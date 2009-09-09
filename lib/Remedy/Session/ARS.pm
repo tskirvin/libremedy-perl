@@ -208,7 +208,7 @@ sub CreateEntry ($$) {
     if (! defined $request_id) {
         $logger->logdie ("ars_CreateEntry failed: " . $self->error . "\n");
     } elsif (! $request_id) {
-        $logger->warn ("item was created but we don't know where");
+        $logger->warn ("item was created, but we don't know where");
         return '';
     }
 
