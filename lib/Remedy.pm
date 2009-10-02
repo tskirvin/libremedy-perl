@@ -1,5 +1,5 @@
 package Remedy;
-our $VERSION = "0.13";
+our $VERSION = "0.13.01";
 # Copyright and license are in the documentation below.
 
 =head1 NAME

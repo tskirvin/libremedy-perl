@@ -78,7 +78,7 @@ sub field_map {
 ### Remedy::Form Overrides ###################################################
 ##############################################################################
 
-=head2 B<Remedy::Form Overrides>
+=head2 B<Remedy::Form> Overrides
 
 =over 4
 

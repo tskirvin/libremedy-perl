@@ -14,7 +14,6 @@ WriteMakefile(
     EXE_FILES         => \@scripts,
     AUTHOR            => 'Tim Skirvin <tskirvin@stanford.edu>',
     PREREQ_PM         => { 
-      'Stanford::Remedy'    => '0.12',
       'Lingua::EN::Inflect' => '1.89',
       'Date::Parse'         => '2.27',
       'Log::Log4perl'       => '1.07',

@@ -1036,10 +1036,10 @@ sub _init {
         if ($@) {
             $@ =~ s/ at .*$//;
             $@ =~ s/(\(ARERR\s*\S+?\)).*$/$1/m;
-            $logger->info ("no formdata for '$table': $@");
+            $logger->info ("no remedy form for '$table': $@");
             return;
         } elsif (!$form) { 
-            $logger->info ("no formdata for '$table'");
+            $logger->info ("no remedy form for '$table': (NO ERROR)");
             return;
         }
     }

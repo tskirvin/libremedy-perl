@@ -248,7 +248,6 @@ sub insert {
 
     unless ($req_id) {
         my $where = $self->create_where_clause ($self->fields_not_empty);
-    warn "WHERE: $where\n";
         my @forms = $self->read ($where, 'max' => 5);
         my $count = scalar @forms;
         $logger->logdie ("no entries found after creation\n") unless $count;
@@ -267,7 +266,6 @@ sub insert {
         $logger->logdie ("could not re-read object into self: $@");
     }
 
-    warn "REQ: $req_id\n";
     ## Return the request id.
     return $req_id;
 }

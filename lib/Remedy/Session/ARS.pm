@@ -461,7 +461,7 @@ sub SetEntry ($$$) {
 
     $logger->debug ("ARS::ars_SetEntry ($name, $request_id, [...])");
     unless (ARS::ars_SetEntry ($ctrl, $name, $request_id, 0, @fields)) {
-        $logger->logdie ("ARS::ars_SetEntry failed: $ARS::ars_errstr\n");
+        $logger->logdie ("ARS::ars_SetEntry failed: " . $self->error . "\n");
     }   
     $logger->debug ('SetEntry end');
             
