@@ -934,6 +934,11 @@ Return '1=3' (which will never match).
 
 =back
 
+=item field type of I<FIELD> is 'integer'
+
+Same as I<time>, except that we don't do timestamp conversions, and the "don't
+understand" condition is '1=4'.
+
 =item default
 
 If I<VALUE> is '%', then return nothing - we won't be restricting the search
@@ -968,9 +973,19 @@ sub limit_string {
         my ($mod, $timestamp) = ($value =~ /^([+-]?=?)?(.*)$/);
 
         my $data;
-        if ($timestamp =~ /^\d+$/)               { $data= $timestamp }
-        elsif (my $time = str2time ($timestamp)) { $data = $time     }
-        else                                     { return '1=2'      }
+        if ($timestamp =~ /^\d+$/)               { $data = $timestamp }
+        elsif (my $time = str2time ($timestamp)) { $data = $time      }
+        else                                     { return '1=2'       }
+
+        return $self->limit_integer_compare ($id, $data, $mod);
+
+    ## 'integer' fields.
+    } elsif ($self->field_is ($field, 'integer')) {
+        my ($mod, $int) = ($value =~ /^([+-]?=?)?(.*)$/);
+
+        my $data;
+        if ($int =~ /^\d+$/)               { $data = $int }
+        else                               { return '1=4' }
 
         return $self->limit_integer_compare ($id, $data, $mod);
 

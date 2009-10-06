@@ -1,1 +1,6 @@
 .*.sw?
+MANIFEST.bak
+Makefile
+Makefile.old
+Remedy-0.13.01.tar.gz
+
