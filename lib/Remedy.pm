@@ -1,5 +1,5 @@
 package Remedy;
-our $VERSION = "0.13.01";
+our $VERSION = "0.13.03";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -398,6 +398,11 @@ sub _or_die {
 ###############################################################################
 ### Final Documentation #######################################################
 ###############################################################################
+
+=head1 ABSTRACT
+
+Remedy offers a generic object-oriented interface to the ARSPerl Remedy
+API, to usable read and modify objects in the Remedy database.  
 
 =head1 REQUIREMENTS
 

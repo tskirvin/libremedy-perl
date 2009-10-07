@@ -847,7 +847,7 @@ Imported from B<Remedy::FormData::Utility>.
 
 Imported from B<Remedy::FormData::Utility>.
 
-=item limit_integer_compare (ID, INT, MODIFIER)
+=item limit_numeric_compare (ID, INT, MODIFIER)
 
 Creates a limitation string (e.g. for B<limit_string>) for an integer value
 I<INT>.  I<MODIFIER> is used to decide on the return value.  Possible values of
@@ -861,7 +861,7 @@ I<MODIFIER>:
 
 =cut
 
-sub limit_integer_compare {
+sub limit_numeric_compare {
     my ($self, $id, $int, $mod) = @_;
     return "'$id' <= $int" if $mod eq '-=';
     return "'$id' >= $int" if $mod eq '+=';
@@ -887,7 +887,7 @@ Return "'I<ID>' == NULL"
 =item field type of I<FIELD> is 'enum'
 
 First, we pull out the opening characters from I<VALUE>, for use with
-B<limit_integer_compare>; this gives us I<MOD> and I<DATA>.  This table
+B<limit_numeric_compare>; this gives us I<MOD> and I<DATA>.  This table
 summarizes how this works:
 
     VALUE             MOD     DATA
@@ -901,11 +901,11 @@ Then we choose what to return based on I<DATA>:
 
 =item I<DATA> is numeric
 
-Return B<limit_integer_compare (I<ID>, I<DATA>, I<MOD>)>
+Return B<limit_numeric_compare (I<ID>, I<DATA>, I<MOD>)>
 
 =item I<DATA> matches a valid enumerated entry I<CONVERT> 
 
-Return B<limit_integer_compare (I<ID>, I<CONVERT>, I<MOD>)>
+Return B<limit_numeric_compare (I<ID>, I<CONVERT>, I<MOD>)>
 
 =item neither
 
@@ -922,11 +922,11 @@ choose what to return based on I<DATA>:
 
 =item I<DATA> is numeric
 
-Return B<limit_integer_compare (I<ID>, I<DATA>, I<MOD>)>
+Return B<limit_numeric_compare (I<ID>, I<DATA>, I<MOD>)>
 
 =item I<DATA> is a string parseable by B<Date::Parse> into I<CONVERT>
 
-Return B<limit_integer_compare (I<ID>, I<CONVERT>, I<MOD>)>
+Return B<limit_numeric_compare (I<ID>, I<CONVERT>, I<MOD>)>
 
 =item neither
 
@@ -938,6 +938,11 @@ Return '1=3' (which will never match).
 
 Same as I<time>, except that we don't do timestamp conversions, and the "don't
 understand" condition is '1=4'.
+
+=item field type of I<FIELD> is 'decimal'
+
+Same as I<time>, except that we don't do timestamp conversions, and the "don't
+understand" condition is '1=5'.
 
 =item default
 
@@ -966,7 +971,7 @@ sub limit_string {
         elsif (defined $hash{$human}) { $data = $hash{$human} }
         else                          { return '1=3'          }
 
-        return $self->limit_integer_compare ($id, $data, $mod);
+        return $self->limit_numeric_compare ($id, $data, $mod);
 
     ## 'time' fields
     } elsif ($self->field_is ($field, 'time')) {
@@ -977,7 +982,7 @@ sub limit_string {
         elsif (my $time = str2time ($timestamp)) { $data = $time      }
         else                                     { return '1=2'       }
 
-        return $self->limit_integer_compare ($id, $data, $mod);
+        return $self->limit_numeric_compare ($id, $data, $mod);
 
     ## 'integer' fields.
     } elsif ($self->field_is ($field, 'integer')) {
@@ -987,7 +992,17 @@ sub limit_string {
         if ($int =~ /^\d+$/)               { $data = $int }
         else                               { return '1=4' }
 
-        return $self->limit_integer_compare ($id, $data, $mod);
+        return $self->limit_numeric_compare ($id, $data, $mod);
+
+    ## 'decimal' fields.
+    } elsif ($self->field_is ($field, 'decimal')) {
+        my ($mod, $int) = ($value =~ /^([+-]?=?)?(.*)$/);
+
+        my $data;
+        if ($int =~ /^[\d\.]+$/)           { $data = $int }
+        else                               { return '1=5' }
+
+        return $self->limit_numeric_compare ($id, $data, $mod);
 
     ## all other field types
     } else {
