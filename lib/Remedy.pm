@@ -1,5 +1,5 @@
 package Remedy;
-our $VERSION = "0.13.03";
+our $VERSION = "0.13.04";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -140,22 +140,16 @@ sub connect {
 
     ## Create and save the Remedy::Session object
     $logger->debug ("creating remedy session to $host as $user");
-    { 
-        local $@;
-        my $session = eval { Remedy::Session->new (%opts) } 
-            or $logger->logdie ("couldn't create object: $@");
-        $self->session ($session);
-    }
+    my $session = eval { Remedy::Session->new (%opts) } 
+        or $logger->logdie ("couldn't create object: $@");
+    $self->session ($session);
 
     ## Actually connect to the Remedy server
     $logger->debug ("connecting to remedy server at $host");
-    { 
-        local $@;
-        my $ctrl = eval { $self->session->connect () };
-        unless ($ctrl) { 
-            # $@ =~ s/ at .*$//;
-            $logger->logdie ("error on connect: $@");
-        }
+    my $ctrl = eval { $self->session->connect () };
+    unless ($ctrl) { 
+        $@ =~ s/ at .*$//;
+        $logger->logdie ("error on connect: $@");
     }
 
     return $self;

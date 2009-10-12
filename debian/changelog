@@ -1,3 +1,11 @@
+libremedy-perl (0.13.04) UNRELEASED; urgency=low
+
+  * Warning about "don't know where the item was created" is now a debug 
+    message.
+  * (Lots of rolled up changes that were being tracked in RedHat at best).
+
+ -- Tim Skirvin <tskirvin@stanford.edu>  Mon, 12 Oct 2009 13:54:02 -0700
+
 libremedy-perl (0.4) lenny; urgency=low
 
   * Actual release
