@@ -1,8 +1,9 @@
-libremedy-perl (0.13.04) UNRELEASED; urgency=low
+libremedy-perl (0.13.05) UNRELEASED; urgency=low
 
   * Warning about "don't know where the item was created" is now a debug 
     message.
   * (Lots of rolled up changes that were being tracked in RedHat at best).
+  * More fixes to actually return debugging error (removing 'local $@')
 
  -- Tim Skirvin <tskirvin@stanford.edu>  Mon, 12 Oct 2009 13:54:02 -0700
 

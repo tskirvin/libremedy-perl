@@ -1,5 +1,5 @@
 package Remedy::Form;
-our $VERSION = "0.50";
+our $VERSION = "0.50.01";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -561,13 +561,10 @@ sub save {
     $self->key_to_remedy;
 
     $logger->debug ("saving data in $class");
-    { 
-        local $@;
-        my $return = eval { $entry->save };
-        unless ($return) { 
-            $logger->error ("could not save: $@");
-            return "could not save: $@";
-        }
+    my $return = eval { $entry->save };
+    unless ($return) { 
+        $logger->error ("could not save: $@");
+        return "could not save: $@";
     }
 
     ## Once again make sure the data is consistent
@@ -662,7 +659,6 @@ sub new_entry {
 
     return unless (defined $session && defined $table_name);
 
-    local $@;
     my $data = eval { Remedy::FormData::Entry->new ('session' => $session,
         'name' => $table_name, 'cache' => $cache) };
     if ($@) { 
