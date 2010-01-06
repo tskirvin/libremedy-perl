@@ -1,5 +1,5 @@
 package Remedy::Config;
-our $VERSION = '0.56';
+our $VERSION = '0.57';
 
 =head1 NAME
 
@@ -204,13 +204,13 @@ $FUNCTIONS{'cache_expire'} = \$CACHE_EXPIRE;
 
 =item $CACHE_NAMESPACE
 
-What namespace should we store our cache in?  Defaults to I<remedy_cache>.
+What namespace should we store our cache in?  Defaults to I<cache>.
 
 Matches the B<cache_namespace> accessor.
 
 =cut
 
-our $CACHE_NAMESPACE = "remedy_cache";
+our $CACHE_NAMESPACE = "cache";
 $FUNCTIONS{'cache_namespace'} = \$CACHE_NAMESPACE;
 
 =item $CACHE_ROOT
@@ -221,7 +221,7 @@ Matches the B<cache_root> accessor.
 
 =cut
 
-our $CACHE_ROOT = "/tmp";
+our $CACHE_ROOT = "/var/lib/remedy";
 $FUNCTIONS{'cache_root'} = \$CACHE_ROOT;
 
 =back

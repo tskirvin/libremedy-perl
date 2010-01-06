@@ -1,5 +1,5 @@
 package Remedy::Cache;
-our $VERSION = '0.90';
+our $VERSION = '0.91';
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -82,7 +82,7 @@ objects are instantiated.
 
 =cut
 
-our $DEFAULT_CACHE_ROOT = "/tmp"; 
+our $DEFAULT_CACHE_ROOT = "/tmp";
 
 =back
 
@@ -278,10 +278,12 @@ undef.
 
 sub set_value {
     my ($self, $cache_key, $results_ref) = @_;
+    my $logger = $self->logger_or_die;
     if (!$CACHING) {
-        $self->logger_or_die->all ("cache globally disabled");
+        $logger->all ("cache globally disabled");
         return;
     } 
+    $logger->all ("setting $cache_key to $results_ref");
     my $rv = $self->cache_object->set ($cache_key, $results_ref);
     return;
 }
