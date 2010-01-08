@@ -1,5 +1,5 @@
 package Remedy::Session::ARS;
-our $VERSION = "0.90";
+our $VERSION = "0.91";
 # Copyright and license are in the documentation below.
 
 =head1 NAME
@@ -264,7 +264,7 @@ sub GetField ($$$) {
     my $cache_key = $session->cache_key ($name, $fieldId) if $cache;
     if ($cache_key) {
         my $results = $cache->get_value ($cache_key);
-        return %$results if defined $results && ref $results;
+        return $results if defined $results && ref $results;
     }
 
     ## Actually do the ARS work
@@ -289,7 +289,7 @@ sub GetField ($$$) {
 
 =item GetFieldsForSchema (NAME [, CACHE])
 
-Call GetField for all the fields in a form. Should help performance
+Call GetField for all the fields in a form. Should help performance.
 
 Returns a hash mapping fieldId to Field Properties Structure for each
 field in the supplied form.

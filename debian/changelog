@@ -1,11 +1,15 @@
-libremedy-perl (0.13.05) UNRELEASED; urgency=low
+libremedy-perl (0.13.05) lenny UNRELEASED; urgency=low
 
   * Warning about "don't know where the item was created" is now a debug 
     message.
-  * (Lots of rolled up changes that were being tracked in RedHat at best).
   * More fixes to actually return debugging error (removing 'local $@')
+  * Config.pm - default cache location is now /var/lib/remedy/cache
+  * Cache.pm - added some logging around set_value () (trying to narrow
+    down some cache corruption issues).
+  * Session/ARS.pm - GetField () cache was returning a dereferenced hash
+    instead of the hash itself.  I'm not sure why it ever worked.
 
- -- Tim Skirvin <tskirvin@stanford.edu>  Mon, 12 Oct 2009 13:54:02 -0700
+ -- Tim Skirvin <tskirvin@stanford.edu>  Fri, 08 Jan 2010 11:03:53 -0800
 
 libremedy-perl (0.4) lenny; urgency=low
 
